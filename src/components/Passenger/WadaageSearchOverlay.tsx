@@ -20,10 +20,12 @@ import {
   Landmark,
   Navigation,
   ShoppingCart,
+  Fuel,
+  Moon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LocationNode } from '../../types';
-import { HARGEISA_PLACES, HargeisaPlace } from '../../data/hargeisaPlaces';
+import { HARGEISA_PLACES, HargeisaPlace, searchHargeisaPlaces } from '../../data/hargeisaPlaces';
 import { resolveHargeisaPlaceCoordinates } from '../../utils/hargeisaPlaceMatcher';
 import { getApiUrl } from '../../services/apiConfig';
 
@@ -167,25 +169,10 @@ export const WadaageSearchOverlay: React.FC<WadaageSearchOverlayProps> = ({
 
   // Filter local Hargeisa database
   const filteredHargeisaPlaces = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return HARGEISA_PLACES.filter((place) => {
-      // Category filter
-      if (selectedCategory !== 'All') {
-        const matchCategory =
-          place.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-          place.subCategory?.toLowerCase().includes(selectedCategory.toLowerCase());
-        if (!matchCategory) return false;
-      }
-
-      if (!query) return place.popular;
-
-      return (
-        place.name.toLowerCase().includes(query) ||
-        place.address.toLowerCase().includes(query) ||
-        place.district?.toLowerCase().includes(query) ||
-        place.searchTerms?.some((term) => term.toLowerCase().includes(query))
-      );
-    }).slice(0, 30);
+    return searchHargeisaPlaces(
+      searchQuery,
+      selectedCategory !== 'All' ? selectedCategory : undefined
+    ).slice(0, 40);
   }, [searchQuery, selectedCategory]);
 
   const handleSelectPlace = (place: LocationNode) => {
@@ -194,16 +181,17 @@ export const WadaageSearchOverlay: React.FC<WadaageSearchOverlayProps> = ({
   };
 
   const categories = [
-    { id: 'All', label: 'All Places', icon: Sparkles },
-    { id: 'Hotel', label: 'Hotels', icon: Hotel },
-    { id: 'Hospital', label: 'Hospitals', icon: Activity },
+    { id: 'All', label: 'Dhammaan (All)', icon: Sparkles },
+    { id: 'Hospital', label: 'Cusbitaallada (Hospitals)', icon: Activity },
+    { id: 'Education', label: 'Dugsiyada & Jaamacadaha (Schools)', icon: GraduationCap },
+    { id: 'Mosque', label: 'Masaajidda (Mosques)', icon: Moon },
+    { id: 'Market', label: 'Suuqyada & Xarumaha (Markets)', icon: ShoppingBag },
+    { id: 'Fuel', label: 'Kaalmaha Shidaalka (Fuel)', icon: Fuel },
+    { id: 'Transit', label: 'Gadiidka & Istaannada (Transit)', icon: Plane },
+    { id: 'Hotel', label: 'Huteellada (Hotels)', icon: Hotel },
+    { id: 'Bank', label: 'Bangiyada & Xawaaladaha (Banks)', icon: Landmark },
+    { id: 'Government', label: 'Hay\'adaha Dowladda (Civic)', icon: Building },
     { id: 'District', label: 'Xaafadaha (Districts)', icon: Home },
-    { id: 'Road', label: 'Roads & Streets', icon: Navigation },
-    { id: 'Market', label: 'Malls & Supermarkets', icon: ShoppingBag },
-    { id: 'Restaurant', label: 'Restaurants & Cafes', icon: Utensils },
-    { id: 'Transit', label: 'Airports & Transit', icon: Plane },
-    { id: 'Education', label: 'Universities', icon: GraduationCap },
-    { id: 'Government', label: 'Government & Banks', icon: Landmark },
   ];
 
   return (

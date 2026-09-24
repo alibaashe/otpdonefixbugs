@@ -31,9 +31,7 @@ const cartoKeyParam = CARTO_KEY ? `?api_key=${CARTO_KEY}&key=${CARTO_KEY}` : '';
 // Tile Layer URLs
 const TILE_LAYERS = {
   dark: {
-    url: CARTO_KEY
-      ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${cartoKeyParam}`
-      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoKeyParam}`,
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
   },
   satellite: {
@@ -41,8 +39,8 @@ const TILE_LAYERS = {
     attribution: '&copy; Esri &mdash; Source: Esri',
   },
   streets: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
+    url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoKeyParam}`,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
   },
 };
 

@@ -1,8 +1,23 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { dbService } from './server/db';
+
+// Master Database of 1,650 Hargeisa Location Coordinates
+let hargeisaMasterLocations: any[] = [];
+try {
+  const jsonPath1650 = path.resolve(process.cwd(), 'public/hargeisa_locations_1650.json');
+  const jsonPath1550 = path.resolve(process.cwd(), 'public/hargeisa_locations_1550.json');
+  const targetPath = fs.existsSync(jsonPath1650) ? jsonPath1650 : jsonPath1550;
+  if (fs.existsSync(targetPath)) {
+    hargeisaMasterLocations = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+    console.log(`[Master DB] Loaded ${hargeisaMasterLocations.length} Hargeisa coordinates.`);
+  }
+} catch (e) {
+  console.warn('[Master DB] Notice: Master DB will load on demand.');
+}
 
 // In-memory OTP storage for WhatsApp Gateway
 interface OtpStore {
@@ -999,6 +1014,67 @@ Return ONLY valid JSON matching this schema:
     res.json({ success: true, message: 'System settings updated successfully' });
   });
 
+  // Fast CORS-enabled Map Tile Proxy Endpoint
+  app.get('/api/tiles/osm/:z/:x/:y.png', async (req, res) => {
+    const { z, x, y } = req.params;
+    try {
+      // Primary: High performance Carto Voyager tile (CORS-friendly, OpenStreetMap based)
+      const cartoRes = await fetch(`https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`);
+      if (cartoRes.ok) {
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const buffer = await cartoRes.arrayBuffer();
+        return res.send(Buffer.from(buffer));
+      }
+
+      // Secondary: Direct OpenStreetMap tile with polite User-Agent
+      const osmRes = await fetch(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, {
+        headers: {
+          'User-Agent': 'WadaageTaxiRideApp/1.0 (contact: baashe2002@gmail.com)',
+        },
+      });
+      if (osmRes.ok) {
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const buffer = await osmRes.arrayBuffer();
+        return res.send(Buffer.from(buffer));
+      }
+      return res.status(404).end();
+    } catch {
+      return res.status(502).end();
+    }
+  });
+
+  // Reverse Geocoding Endpoint with polite User-Agent & Somali/English language
+  app.get('/api/geocode/reverse', async (req, res) => {
+    const lat = req.query.lat as string;
+    const lng = req.query.lng as string;
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'lat and lng parameters are required' });
+    }
+
+    try {
+      const nomRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'WadaageTaxiRideApp/1.0 (contact: baashe2002@gmail.com)',
+            'Accept-Language': 'en,so',
+          },
+        }
+      );
+      if (nomRes.ok) {
+        const data = await nomRes.json();
+        return res.json(data);
+      }
+      return res.status(nomRes.status).json({ error: 'Reverse geocode failed' });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'Internal server error' });
+    }
+  });
+
   // Google Maps & Places Autocomplete API Endpoint (Strictly Hargeisa City)
   app.get('/api/places/autocomplete', async (req, res) => {
     const input = ((req.query.input as string) || '').trim();
@@ -1009,6 +1085,36 @@ Return ONLY valid JSON matching this schema:
     const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
     const results: any[] = [];
     const seenNames = new Set<string>();
+
+    // 0. Instant Tier 0: Direct Match from 1,550 Hargeisa Master Coordinates
+    if (hargeisaMasterLocations && hargeisaMasterLocations.length > 0) {
+      const lowerInput = input.toLowerCase();
+      const matched = hargeisaMasterLocations.filter((item) => {
+        return (
+          item.name.toLowerCase().includes(lowerInput) ||
+          item.address.toLowerCase().includes(lowerInput) ||
+          (item.district && item.district.toLowerCase().includes(lowerInput)) ||
+          (item.category && item.category.toLowerCase().includes(lowerInput)) ||
+          (item.searchTerms && item.searchTerms.some((t: string) => t.includes(lowerInput)))
+        );
+      }).slice(0, 10);
+
+      for (const m of matched) {
+        if (!seenNames.has(m.name.toLowerCase())) {
+          seenNames.add(m.name.toLowerCase());
+          results.push({
+            id: m.id,
+            name: m.name,
+            address: m.address,
+            lat: m.lat,
+            lng: m.lng,
+            category: m.category,
+            district: m.district,
+            source: 'hargeisa_master_db',
+          });
+        }
+      }
+    }
 
     // 1. If official Google Maps API key exists, query Google Places API with Hargeisa location bias & strict bounds
     if (apiKey) {

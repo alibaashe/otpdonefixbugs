@@ -31,6 +31,32 @@ const CARTO_KEY = rawCartoKey.includes('key=')
 
 const cartoKeyParam = CARTO_KEY ? `?api_key=${CARTO_KEY}&key=${CARTO_KEY}` : '';
 
+// Robust, high-speed CORS-enabled OpenStreetMap-based basemaps (Carto CDN)
+const CARTO_VOYAGER_TILES = [
+  `https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoKeyParam}`,
+];
+
+const CARTO_DARK_TILES = [
+  `https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+];
+
+const CARTO_LIGHT_TILES = [
+  `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+  `https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${cartoKeyParam}`,
+];
+
+const ESRI_SATELLITE_TILES = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+];
+
 // Mapbox & Vector Map Style Definitions
 export type MapboxStyleKey = 'streets' | 'navigation_day' | 'navigation_night' | 'satellite' | 'outdoors' | 'custom_studio';
 
@@ -47,11 +73,9 @@ const MAPBOX_STYLES: Record<
       sources: {
         'osm-streets': {
           type: 'raster',
-          tiles: [
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          ],
+          tiles: CARTO_VOYAGER_TILES,
           tileSize: 256,
-          attribution: '© OpenStreetMap contributors',
+          attribution: '© OpenStreetMap contributors © CARTO',
         },
       },
       layers: [
@@ -74,11 +98,9 @@ const MAPBOX_STYLES: Record<
       sources: {
         'osm-nav': {
           type: 'raster',
-          tiles: [
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          ],
+          tiles: CARTO_VOYAGER_TILES,
           tileSize: 256,
-          attribution: '© OpenStreetMap contributors',
+          attribution: '© OpenStreetMap contributors © CARTO',
         },
       },
       layers: [
@@ -101,14 +123,9 @@ const MAPBOX_STYLES: Record<
       sources: {
         'osm-dark': {
           type: 'raster',
-          tiles: CARTO_KEY
-            ? [
-                `https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${cartoKeyParam}`,
-                `https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${cartoKeyParam}`,
-              ]
-            : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tiles: CARTO_DARK_TILES,
           tileSize: 256,
-          attribution: '© OpenStreetMap contributors',
+          attribution: '© OpenStreetMap contributors © CARTO',
         },
       },
       layers: [
@@ -131,9 +148,7 @@ const MAPBOX_STYLES: Record<
       sources: {
         'esri-satellite': {
           type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          ],
+          tiles: ESRI_SATELLITE_TILES,
           tileSize: 256,
           attribution: '© Esri / DigitalGlobe / Earthstar',
         },
@@ -158,11 +173,9 @@ const MAPBOX_STYLES: Record<
       sources: {
         'osm-outdoors': {
           type: 'raster',
-          tiles: [
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          ],
+          tiles: CARTO_LIGHT_TILES,
           tileSize: 256,
-          attribution: '© OpenStreetMap contributors',
+          attribution: '© OpenStreetMap contributors © CARTO',
         },
       },
       layers: [
@@ -642,6 +655,32 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
       center: [initialLng, initialLat],
       zoom: 13.8,
       attributionControl: false,
+      transformRequest: (url: string) => {
+        // Automatically rewrite any openstreetmap tile request to Carto Voyager tiles with CORS
+        if (url.includes('tile.openstreetmap.org')) {
+          const match = url.match(/\/(\d+)\/(\d+)\/(\d+)\.png/);
+          if (match) {
+            const [, z, x, y] = match;
+            return {
+              url: `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+            };
+          }
+        }
+        return { url };
+      },
+    });
+
+    // Suppress network/tile load errors so they don't trigger unhandled AJAXError
+    map.on('error', (e) => {
+      const err = (e as any)?.error;
+      if (
+        err?.status === 0 ||
+        err?.name === 'AJAXError' ||
+        err?.message?.includes('openstreetmap.org') ||
+        err?.message?.includes('Failed to fetch')
+      ) {
+        return;
+      }
     });
 
     map.on('load', () => {

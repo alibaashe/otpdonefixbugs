@@ -574,8 +574,20 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [driverLiveGpsEnabled, setDriverLiveGpsEnabled] = useState<boolean>(true);
   const [driverModeOnline, setDriverModeOnline] = useState<boolean>(true);
 
-  const defaultPickup = CITY_LOCATIONS.find((p) => p.id === 'ina_naxar_street') || CITY_LOCATIONS[0];
-  const defaultDropoff = CITY_LOCATIONS.find((p) => p.id === 'berbera_bus_terminal') || CITY_LOCATIONS[1] || CITY_LOCATIONS[0];
+  const defaultPickup: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('waqooyigalbeed') || p.id.includes('waqooyi')) || {
+    id: 'waqooyigalbeed_hargeisa',
+    name: 'Waqooyigalbeed, Hargeisa',
+    address: 'Waqooyigalbeed District, Hargeisa',
+    lat: 9.5780,
+    lng: 44.0350,
+  };
+  const defaultDropoff: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('suuqa hoose') || p.id.includes('suuqa_hoose')) || {
+    id: 'suuqa_hoose_hargeisa',
+    name: 'Suuqa Hoose, Hargeisa',
+    address: 'Suuqa Hoose, Downtown Waheen, Hargeisa',
+    lat: 9.5620,
+    lng: 44.0680,
+  };
 
   const [pickupLocation, setPickupLocation] = useState<LocationNode>(defaultPickup);
   const [realUserLocation, setRealUserLocation] = useState<LocationNode | null>(null);
@@ -595,11 +607,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let locName = '📍 My Current Location (GPS)';
           let address = `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-          // Real human-readable OpenStreetMap reverse geocoding
+          // Real human-readable reverse geocoding via server proxy
           try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
-              headers: { 'Accept-Language': 'en' },
-            });
+            const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}`);
             if (res.ok) {
               const data = await res.json();
               if (data && data.display_name) {

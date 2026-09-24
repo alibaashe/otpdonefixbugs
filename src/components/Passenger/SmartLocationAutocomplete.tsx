@@ -12,6 +12,7 @@ import {
   Hotel,
   Landmark,
   MapPin,
+  Moon,
   Navigation,
   Plane,
   Search,
@@ -46,16 +47,16 @@ interface SmartLocationAutocompleteProps {
 
 const CATEGORY_TABS = [
   'All',
-  'Hotels',
-  'Hospitals',
-  'Xaafadaha (Districts)',
-  'Roads & Streets',
+  'Hospitals & Healthcare',
+  'Schools & Universities',
+  'Mosques (Masaajidda)',
   'Markets & Malls',
-  'Restaurants',
-  'Banks & Money',
-  'Universities',
-  'Government',
-  'Airport & Transit',
+  'Fuel Stations (Kaalmaha)',
+  'Transport & Terminals',
+  'Hotels & Hospitality',
+  'Banks & Financial',
+  'Government & Civic',
+  'Xaafadaha (Districts)',
 ];
 
 export const SmartLocationAutocomplete: React.FC<SmartLocationAutocompleteProps> = ({
@@ -102,17 +103,7 @@ export const SmartLocationAutocomplete: React.FC<SmartLocationAutocompleteProps>
 
   // Filter local Hargeisa registered places based on category and query
   const localResults = useMemo(() => {
-    const categoryMap: Record<string, string> = {
-      'Hotels': 'Hotel',
-      'Hospitals': 'Hospital',
-      'Banks & Money': 'Financial',
-      'Markets & Malls': 'Commercial',
-      'Universities': 'Education',
-      'Government': 'Government',
-      'Airport & Transit': 'Transit',
-    };
-    const mappedCategory = activeCategory !== 'All' ? categoryMap[activeCategory] || activeCategory : undefined;
-    return searchHargeisaPlaces(query, mappedCategory);
+    return searchHargeisaPlaces(query, activeCategory !== 'All' ? activeCategory : undefined);
   }, [query, activeCategory]);
 
   // Real-time Google Maps Suggestions on first word typed (even 1-2 characters)
@@ -250,6 +241,9 @@ export const SmartLocationAutocomplete: React.FC<SmartLocationAutocompleteProps>
     }
     if (iconName === 'HeartPulse' || cat.includes('hospital') || cat.includes('health') || cat.includes('clinic')) {
       return <HeartPulse className="w-4 h-4 text-rose-500 shrink-0" />;
+    }
+    if (iconName === 'Moon' || cat.includes('mosque') || cat.includes('masjid')) {
+      return <Moon className="w-4 h-4 text-emerald-600 shrink-0" />;
     }
     if (iconName === 'GraduationCap' || cat.includes('education') || cat.includes('university') || cat.includes('school')) {
       return <GraduationCap className="w-4 h-4 text-blue-500 shrink-0" />;
