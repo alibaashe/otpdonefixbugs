@@ -323,9 +323,9 @@ export const MobilePassengerApp: React.FC = () => {
           <Menu className="w-5 h-5 stroke-[2.5]" />
         </button>
 
-        {/* Center: Wadaage Share Brand Logo */}
+        {/* Center: Title Header */}
         <div className="flex items-center justify-center">
-          <WadaageShareBrandLogo size="md" />
+          <h1 className="text-base font-black text-slate-900 tracking-tight">Rider Passenger</h1>
         </div>
 
         {/* Right: Somaliland Flag + Hargeisa Pill & Notification Bell */}
