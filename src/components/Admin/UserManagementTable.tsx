@@ -304,8 +304,15 @@ export const UserManagementTable: React.FC = () => {
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('wadaage_ride_realtime_events');
         channel.onmessage = (event) => {
-          if (event.data?.type === 'USER_REGISTERED' || event.data?.type === 'DRIVER_REGISTERED' || event.data?.type === 'USER_UPDATED') {
+          if (
+            event.data?.type === 'USER_REGISTERED' ||
+            event.data?.type === 'DRIVER_REGISTERED' ||
+            event.data?.type === 'USER_UPDATED' ||
+            event.data?.type === 'DRIVER_WALLET_UPDATED' ||
+            event.data?.type === 'RIDE_STATUS_UPDATED'
+          ) {
             setUsers(loadPersistedUsers(drivers, driverApplications));
+            setLastSyncTime(new Date().toLocaleTimeString());
           }
         };
       }

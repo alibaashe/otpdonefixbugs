@@ -307,6 +307,7 @@ export interface DriverWalletTransaction {
   verificationMethod?: 'auto_ussd_gateway' | 'admin_confirmation' | 'manual_ref';
   rideId?: string;
   adminNote?: string;
+  newBalanceUsd?: number;
 }
 
 export type AdminPermissionKey =

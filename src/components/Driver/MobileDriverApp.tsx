@@ -917,6 +917,36 @@ export const MobileDriverApp: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Real Platform Commission Deduction & Updated Balance Breakdown */}
+                <div className="pt-2 border-t border-emerald-200/80 space-y-2">
+                  <div className="flex items-center justify-between bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-xs">
+                    <div>
+                      <span className="font-extrabold text-amber-900 block">Komishanka Wadaage (Commission Deducted)</span>
+                      <span className="text-[10px] text-amber-700">Automatic deduction per completed trip</span>
+                    </div>
+                    <span className="font-mono font-black text-rose-600 text-sm">-1,000 SLSH (-$0.10)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-slate-900 text-white p-3 rounded-xl shadow-inner">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Haraagaaga Cusub (Real Driver Balance)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-emerald-400">
+                        {Math.round(driverWalletBalanceUsd * EXCHANGE_RATE_USD_TO_SLSH).toLocaleString()} SLSH
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-black text-lg text-emerald-400">
+                        ${driverWalletBalanceUsd.toFixed(2)} USD
+                      </span>
+                      <span className="block text-[9px] text-emerald-300 font-bold uppercase tracking-wider">
+                        {driverWalletBalanceUsd >= 0.10 ? '✓ Live Active' : '⚠ Low Balance'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Return to Radar / Accept Next Order Button */}
@@ -2057,6 +2087,68 @@ export const MobileDriverApp: React.FC = () => {
                 Faahfaahin
               </button>
             </div>
+          </div>
+
+          {/* Dedicated Working Capital / Commission Float Real Balance Card */}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-md space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-black">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">
+                    Haraaga Komishanka (Prepaid Float)
+                  </h3>
+                  <span className="text-[10px] text-slate-400">Zaad / eDahab Commission Wallet</span>
+                </div>
+              </div>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  driverWalletBalanceUsd >= 0.10
+                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                    : 'bg-rose-100 text-rose-700 border border-rose-300'
+                }`}
+              >
+                {driverWalletBalanceUsd >= 0.10 ? 'Eligible for Trips' : 'Low Float (< $0.10)'}
+              </span>
+            </div>
+
+            <div className="bg-slate-900 rounded-2xl p-4 text-white flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                  Current Real Balance
+                </span>
+                <span className="text-xs font-mono font-bold text-amber-400">
+                  {Math.round(driverWalletBalanceUsd * EXCHANGE_RATE_USD_TO_SLSH).toLocaleString()} SLSH
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-2xl font-black font-mono text-emerald-400">
+                  ${driverWalletBalanceUsd.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-slate-400 block">USD</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 bg-slate-50 rounded-xl p-3 border border-slate-200/80 space-y-1">
+              <div className="flex items-center justify-between font-bold text-slate-700">
+                <span>Wadaage Platform Commission:</span>
+                <span className="font-mono text-rose-600">-1,000 SLSH ($0.10) / trip</span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Waxa si toos ah looga jaraa haraagaaga Zaad/eDahab marka aad qabato oo dhammayso safar kasta.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowWalletModal(true)}
+              className="w-full py-2.5 px-4 bg-[#008751] hover:bg-[#007345] text-white font-black rounded-xl text-xs uppercase tracking-wider shadow transition flex items-center justify-center space-x-1.5"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Ku Shubo Haraag (Top-Up ZAAD / eDahab)</span>
+            </button>
           </div>
         </div>
       )}

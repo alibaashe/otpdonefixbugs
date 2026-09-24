@@ -18,7 +18,8 @@ import {
   UserCheck,
   User,
   Car,
-  Layers
+  Layers,
+  Receipt,
 } from 'lucide-react';
 import { useRide } from '../../context/RideContext';
 import { DriverWalletTransaction } from '../../types';
@@ -37,9 +38,9 @@ export const WadaageAdminWalletControl: React.FC = () => {
     getUserWalletBalance,
   } = useRide();
 
-  const [activeTab, setActiveTab] = useState<'pending' | 'credit' | 'ledger'>('pending');
+  const [activeTab, setActiveTab] = useState<'drivers' | 'pending' | 'credit' | 'ledger'>('drivers');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed' | 'rejected'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'commission' | 'pending' | 'completed' | 'rejected'>('all');
 
   // Editable real amounts per pending transaction ID
   const [editedAmounts, setEditedAmounts] = useState<{ [txId: string]: number }>({});
@@ -57,14 +58,23 @@ export const WadaageAdminWalletControl: React.FC = () => {
   const pendingTxs = driverWalletTransactions.filter((tx) => tx.status === 'pending_verification');
   const completedTxs = driverWalletTransactions.filter((tx) => tx.status === 'completed');
   const rejectedTxs = driverWalletTransactions.filter((tx) => tx.status === 'rejected');
+  const commissionTxs = driverWalletTransactions.filter(
+    (tx) => tx.type === 'commission_deduction' || tx.amountSos < 0 || (tx.title || '').includes('Commission')
+  );
+  const totalCommissionDeductedSos = Math.abs(commissionTxs.reduce((sum, t) => sum + (t.amountSos || 0), 0));
+  const totalCommissionDeductedUsd = Math.abs(commissionTxs.reduce((sum, t) => sum + (t.amountUsd || 0), 0));
 
   const filteredTxs = driverWalletTransactions.filter((tx) => {
     const matchesSearch =
       (tx.driverName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tx.driverPhone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tx.referenceId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tx.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tx.id || '').toLowerCase().includes(searchTerm.toLowerCase());
 
+    if (filterStatus === 'commission') {
+      return matchesSearch && (tx.type === 'commission_deduction' || tx.amountSos < 0 || (tx.title || '').includes('Commission'));
+    }
     if (filterStatus === 'pending') return matchesSearch && tx.status === 'pending_verification';
     if (filterStatus === 'completed') return matchesSearch && tx.status === 'completed';
     if (filterStatus === 'rejected') return matchesSearch && tx.status === 'rejected';
@@ -150,7 +160,19 @@ export const WadaageAdminWalletControl: React.FC = () => {
         </div>
 
         {/* Header Action Tabs */}
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveTab('drivers')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center space-x-1.5 cursor-pointer ${
+              activeTab === 'drivers'
+                ? 'bg-emerald-500 text-slate-950 shadow-md'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Driver Balances & Fleet Audit</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('pending')}
             className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center space-x-1.5 cursor-pointer ${
@@ -174,33 +196,174 @@ export const WadaageAdminWalletControl: React.FC = () => {
             <PlusCircle className="w-4 h-4" />
             <span>Direct Credit</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('ledger')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center space-x-1.5 cursor-pointer ${
+              activeTab === 'ledger'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            <Receipt className="w-4 h-4" />
+            <span>Ledger & Audit</span>
+          </button>
         </div>
       </div>
 
       {/* 2. KPI METRICS ROW */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/50">
-          <span className="text-slate-500 dark:text-amber-300 block text-[10px] font-bold uppercase">Pending Receipts</span>
-          <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{pendingTxs.length}</span>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/50">
+          <span className="text-slate-500 dark:text-emerald-300 block text-[10px] font-bold uppercase">Fleet Drivers</span>
+          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">{drivers.length}</span>
+          <span className="text-[10px] text-emerald-700 dark:text-emerald-300 block font-semibold">Live Registered</span>
         </div>
 
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/50">
-          <span className="text-slate-500 dark:text-emerald-300 block text-[10px] font-bold uppercase">Verified Approvals</span>
-          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{completedTxs.length}</span>
+        <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-200 dark:border-indigo-800/50">
+          <span className="text-slate-500 dark:text-indigo-300 block text-[10px] font-bold uppercase">Commission Deducted</span>
+          <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+            ${totalCommissionDeductedUsd.toFixed(2)}
+          </span>
+          <span className="text-[10px] text-indigo-700 dark:text-indigo-300 block font-semibold font-mono">
+            {totalCommissionDeductedSos.toLocaleString()} SLSH
+          </span>
+        </div>
+
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/50">
+          <span className="text-slate-500 dark:text-amber-300 block text-[10px] font-bold uppercase">Pending Top-Ups</span>
+          <span className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">{pendingTxs.length}</span>
+          <span className="text-[10px] text-amber-700 dark:text-amber-300 block font-semibold">Awaiting Verification</span>
+        </div>
+
+        <div className="p-3 bg-teal-50 dark:bg-teal-950/30 rounded-2xl border border-teal-200 dark:border-teal-800/50">
+          <span className="text-slate-500 dark:text-teal-300 block text-[10px] font-bold uppercase">Verified Credited</span>
+          <span className="text-2xl font-black text-teal-600 dark:text-teal-400 font-mono">
+            {completedTxs.reduce((sum, t) => sum + (t.amountSos || 0), 0).toLocaleString()} SLSH
+          </span>
+          <span className="text-[10px] text-teal-700 dark:text-teal-300 block font-semibold font-mono">
+            (${completedTxs.reduce((sum, t) => sum + (t.amountUsd || 0), 0).toFixed(2)} USD)
+          </span>
         </div>
 
         <div className="p-3 bg-rose-50 dark:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-800/50">
-          <span className="text-slate-500 dark:text-rose-300 block text-[10px] font-bold uppercase">Rejected Invalid</span>
-          <span className="text-2xl font-black text-rose-600 dark:text-rose-400">{rejectedTxs.length}</span>
-        </div>
-
-        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
-          <span className="text-slate-500 block text-[10px] font-bold uppercase">Total Verified Credited</span>
-          <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-            {completedTxs.reduce((sum, t) => sum + t.amountSos, 0).toLocaleString()} SLSH
-          </span>
+          <span className="text-slate-500 dark:text-rose-300 block text-[10px] font-bold uppercase">Rejected / Void</span>
+          <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">{rejectedTxs.length}</span>
+          <span className="text-[10px] text-rose-700 dark:text-rose-300 block font-semibold">Invalid Receipts</span>
         </div>
       </div>
+
+      {/* 2.5 TAB: FLEET DRIVER BALANCES & COMMISSION AUDIT */}
+      {activeTab === 'drivers' && (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h4 className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Real-Time Driver Wallets & Commission Audit</span>
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Monitors live working float balances, trip commission deductions (-1,000 SLSH / $0.10), and lockout threshold ($0.10).
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab('credit')}
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs flex items-center space-x-1.5 transition self-start sm:self-auto cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Direct Top-Up Driver</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <th className="py-2.5 px-3">Driver Profile</th>
+                  <th className="py-2.5 px-3">Vehicle & Plate</th>
+                  <th className="py-2.5 px-3 text-right">Real Balance (USD)</th>
+                  <th className="py-2.5 px-3 text-right">Real Balance (SLSH)</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-center">Total Trips</th>
+                  <th className="py-2.5 px-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                {drivers.map((drv) => {
+                  const balUsd = getDriverWalletBalance(drv.id) || (drv.phone ? getDriverWalletBalance(drv.phone) : 0);
+                  const balSos = Math.round(balUsd * 10000);
+                  const isEligible = balUsd >= 0.10;
+
+                  return (
+                    <tr key={drv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-[#008751] font-black flex items-center justify-center shrink-0 border border-emerald-300">
+                            {drv.name.charAt(0)}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 dark:text-white block">{drv.name}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{drv.phone}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <span className="font-mono font-bold text-slate-700 dark:text-slate-300 block">
+                          {drv.vehicle?.licensePlate || (drv as any).licensePlate || (drv as any).license_plate || 'SL-101'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 capitalize">{drv.vehicle?.category?.replace('_', ' ') || (drv as any).vehicle_category?.replace('_', ' ') || 'Taxi'}</span>
+                      </td>
+
+                      <td className="py-3 px-3 text-right">
+                        <span className={`font-mono font-black text-sm block ${isEligible ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                          ${balUsd.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-slate-400">USD</span>
+                      </td>
+
+                      <td className="py-3 px-3 text-right">
+                        <span className="font-mono font-bold text-slate-900 dark:text-white text-xs block">
+                          {balSos.toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-slate-400">SLSH</span>
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            isEligible
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300'
+                              : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300'
+                          }`}
+                        >
+                          {isEligible ? 'Active (Eligible)' : 'Lockout (< $0.10)'}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                        {drv.totalTrips || 0}
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          onClick={() => {
+                            setTargetDriverId(drv.id);
+                            setTargetType('driver');
+                            setActiveTab('credit');
+                          }}
+                          className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-lg text-[10px] uppercase tracking-wider transition cursor-pointer"
+                        >
+                          + Credit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* 3. TAB 1: PENDING RECEIPTS VERIFICATION QUEUE */}
       {activeTab === 'pending' && (
@@ -498,18 +661,20 @@ export const WadaageAdminWalletControl: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center space-x-2 shrink-0">
-            {(['all', 'pending', 'completed', 'rejected'] as const).map((st) => (
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            {(['all', 'commission', 'pending', 'completed', 'rejected'] as const).map((st) => (
               <button
                 key={st}
                 onClick={() => setFilterStatus(st)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
                   filterStatus === st
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    ? st === 'commission'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-emerald-500 text-slate-950 shadow-sm'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                {st}
+                {st === 'commission' ? 'Commissions (-$0.10)' : st}
               </button>
             ))}
           </div>

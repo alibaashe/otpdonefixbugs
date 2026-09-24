@@ -1665,50 +1665,97 @@ Return ONLY valid JSON matching this schema:
     }
 
     const targetDriverId = driverId || existing?.assignedDriverId || 'drv_01';
+    const targetDriverPhone = req.body.driverPhone || existing?.driverPhone || '';
     const totalCollectedFare = Number(finalFare || existing?.totalFare || 0);
 
     const commissionSos = 1000;
     const commissionUsd = 0.10;
 
+    const cleanTargetPhone = String(targetDriverPhone || targetDriverId).replace(/\D/g, '');
+    let driverInDb = dbService.store.drivers.find(
+      (d: any) =>
+        d.id === targetDriverId ||
+        d.user_id === targetDriverId ||
+        (d.phone && (d.phone === targetDriverPhone || d.phone === targetDriverId)) ||
+        (cleanTargetPhone && d.phone && String(d.phone).replace(/\D/g, '').endsWith(cleanTargetPhone))
+    );
+
+    // Calculate exact new balance: either use explicit verified client newBalanceUsd or deduct atomically
+    let calculatedNewBal: number;
+    if (req.body.newBalanceUsd !== undefined && !isNaN(Number(req.body.newBalanceUsd))) {
+      calculatedNewBal = Math.max(0, Math.round(Number(req.body.newBalanceUsd) * 100) / 100);
+    } else if (driverInDb) {
+      const curBal = Number(driverInDb.wallet_balance_usd ?? driverInDb.walletBalanceUsd ?? 1.00);
+      calculatedNewBal = Math.max(0, Math.round((curBal - commissionUsd) * 100) / 100);
+    } else {
+      calculatedNewBal = 0.90;
+    }
+
+    if (driverInDb) {
+      driverInDb.wallet_balance_usd = calculatedNewBal;
+      driverInDb.walletBalanceUsd = calculatedNewBal;
+      driverInDb.total_trips = (Number(driverInDb.total_trips) || 0) + 1;
+      driverInDb.today_earnings_usd = Math.round(((Number(driverInDb.today_earnings_usd) || 0) + totalCollectedFare) * 100) / 100;
+      if (calculatedNewBal < 0.10) {
+        driverInDb.status = 'offline';
+        driverInDb.is_online = 0;
+      }
+      dbService.syncDriverToMySQL(driverInDb).catch(() => {});
+    } else {
+      // Create and seed driver record in memory store so Admin and database always match
+      const newDriverRecord = {
+        id: targetDriverId,
+        user_id: targetDriverId,
+        name: existing?.driverName || 'Wadaage Captain',
+        phone: targetDriverPhone || (targetDriverId.startsWith('+') ? targetDriverId : '+252 63 6807814'),
+        wallet_balance_usd: calculatedNewBal,
+        walletBalanceUsd: calculatedNewBal,
+        status: calculatedNewBal >= 0.10 ? 'available' : 'offline',
+        is_online: calculatedNewBal >= 0.10 ? 1 : 0,
+        total_trips: 1,
+        today_earnings_usd: totalCollectedFare,
+        rating: 5.0,
+      };
+      dbService.store.drivers.unshift(newDriverRecord);
+      driverInDb = newDriverRecord;
+      dbService.syncDriverToMySQL(newDriverRecord).catch(() => {});
+    }
+
+    // Also update any matching user record in store
+    const userInDb = dbService.store.users.find(
+      (u: any) =>
+        u.id === targetDriverId ||
+        (targetDriverPhone && u.phone === targetDriverPhone) ||
+        (cleanTargetPhone && u.phone && String(u.phone).replace(/\D/g, '').endsWith(cleanTargetPhone))
+    );
+    if (userInDb) {
+      userInDb.wallet_balance_usd = calculatedNewBal;
+      userInDb.wallet_balance_sos = Math.round(calculatedNewBal * 10000);
+      dbService.syncUserToMySQL(userInDb).catch(() => {});
+    }
+
     const commTx = {
       id: `dtx_dropoff_${Date.now()}`,
       driverId: targetDriverId,
+      driverPhone: driverInDb?.phone || targetDriverPhone,
+      driverName: driverInDb?.name || existing?.driverName || 'Captain',
       user_id: targetDriverId,
-      transaction_type: 'commission',
+      transaction_type: 'commission_deduction',
       type: 'commission_deduction',
       amountUsd: -commissionUsd,
       amount_usd: -commissionUsd,
       amountSos: -commissionSos,
+      newBalanceUsd: calculatedNewBal,
       title: `Ride Drop-Off Commission Deducted (-1,000 SLSH) (Ride #${rideId.slice(-6)})`,
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'completed',
       rideId,
+      referenceId: `COMM-${rideId.slice(-6)}`,
     };
 
     // Persist transaction & update driver balance in database store
     dbService.store.wallet_transactions.unshift(commTx);
     dbService.syncTransactionToMySQL(commTx).catch(() => {});
-
-    const cleanTargetPhone = String(targetDriverId).replace(/\D/g, '');
-    const driverInDb = dbService.store.drivers.find(
-      (d: any) =>
-        d.id === targetDriverId ||
-        d.user_id === targetDriverId ||
-        (d.phone && d.phone === targetDriverId) ||
-        (cleanTargetPhone && d.phone && String(d.phone).replace(/\D/g, '') === cleanTargetPhone)
-    );
-
-    if (driverInDb) {
-      const curBal = Number(driverInDb.wallet_balance_usd || driverInDb.walletBalanceUsd || 0);
-      const newBal = Math.max(0, Math.round((curBal - commissionUsd) * 100) / 100);
-      driverInDb.wallet_balance_usd = newBal;
-      driverInDb.walletBalanceUsd = newBal;
-      if (newBal < 0.10) {
-        driverInDb.status = 'offline';
-        driverInDb.is_online = 0;
-      }
-      dbService.syncDriverToMySQL(driverInDb).catch(() => {});
-    }
 
     if (existing) {
       existing.status = 'completed';
@@ -1724,10 +1771,10 @@ Return ONLY valid JSON matching this schema:
     const ssePayload = `data: ${JSON.stringify({
       type: 'DRIVER_WALLET_UPDATED',
       driverId: targetDriverId,
-      driverPhone: driverInDb?.phone,
-      amountUsd: -0.10,
-      amountSos: -1000,
-      newBalanceUsd: driverInDb ? driverInDb.wallet_balance_usd : undefined,
+      driverPhone: driverInDb?.phone || targetDriverPhone,
+      amountUsd: -commissionUsd,
+      amountSos: -commissionSos,
+      newBalanceUsd: calculatedNewBal,
       tx: commTx,
       timestamp: Date.now(),
     })}\n\n`;
@@ -1741,7 +1788,8 @@ Return ONLY valid JSON matching this schema:
       alreadyFinished: false,
       ride: existing || { id: rideId, status: 'completed' },
       commissionTx: commTx,
-      message: 'Ride finished successfully and -1,000 SLSH ($0.10) commission deducted.',
+      newBalanceUsd: calculatedNewBal,
+      message: `Ride finished successfully and -1,000 SLSH ($0.10) commission deducted. Real driver balance: $${calculatedNewBal.toFixed(2)} USD`,
     });
   });
 

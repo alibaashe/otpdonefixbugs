@@ -1573,7 +1573,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (driverWallets[key] !== undefined) {
         const val = Number(driverWallets[key]);
         if (!isNaN(val)) {
-          if (mapBal === null || val > mapBal) mapBal = val;
+          mapBal = val;
+          break; // First direct alias hit in the driverWallets map is authoritative
         }
       }
     }
@@ -2604,8 +2605,13 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const actualId = foundDriver?.id || targetDriverId;
     const actualPhone = foundDriver?.phone || targetPhone;
 
-    // Get current balance
-    const currentBalUsd = getDriverWalletBalance(actualId) || (actualPhone ? getDriverWalletBalance(actualPhone) : 0);
+    // Get current balance with fallback to driver record
+    const retrievedBal = getDriverWalletBalance(actualId) || (actualPhone ? getDriverWalletBalance(actualPhone) : 0);
+    const fallbackBal = foundDriver
+      ? Number(foundDriver.walletBalanceUsd ?? (foundDriver as any).wallet_balance_usd ?? 1.00)
+      : (currentUser?.role === 'driver' ? Number(currentUser.walletBalanceUsd ?? 1.00) : 1.00);
+    const currentBalUsd = retrievedBal > 0 ? retrievedBal : fallbackBal;
+
     const newBalUsd = isAbsoluteBalance
       ? Math.max(0, Math.round(incomingUsdAmount * 100) / 100)
       : Math.max(0, Math.round((currentBalUsd + incomingUsdAmount) * 100) / 100);
@@ -2613,21 +2619,58 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 1. Mutate driverWallets map across ALL key aliases simultaneously
     setDriverWallets((prev) => {
       const updated = { ...prev };
-      if (actualId) updated[actualId] = newBalUsd;
-      if (targetDriverId) updated[targetDriverId] = newBalUsd;
-      if (actualPhone) updated[actualPhone] = newBalUsd;
-      if (targetPhone) updated[targetPhone] = newBalUsd;
+      const allAliases = new Set<string>();
+      if (actualId) allAliases.add(actualId);
+      if (targetDriverId) allAliases.add(targetDriverId);
+      if (actualPhone) allAliases.add(actualPhone);
+      if (targetPhone) allAliases.add(targetPhone);
       if (cleanPhone) {
-        updated[cleanPhone] = newBalUsd;
-        updated[`+252 ${cleanPhone}`] = newBalUsd;
+        allAliases.add(cleanPhone);
+        allAliases.add(`+252 ${cleanPhone}`);
+        allAliases.add(`+252${cleanPhone}`);
       }
-      if (currentUser && (currentUser.id === actualId || currentUser.phone === actualPhone || (cleanPhone && currentUser.phone?.replace(/\D/g, '').endsWith(cleanPhone)))) {
-        updated[currentUser.id] = newBalUsd;
-        if (currentUser.phone) updated[currentUser.phone] = newBalUsd;
+      if (foundDriver) {
+        if (foundDriver.id) allAliases.add(foundDriver.id);
+        if (foundDriver.phone) {
+          allAliases.add(foundDriver.phone);
+          const fClean = String(foundDriver.phone).replace(/\D/g, '');
+          if (fClean) allAliases.add(fClean);
+        }
       }
+      if (currentUser && currentUser.role === 'driver') {
+        const cClean = currentUser.phone ? currentUser.phone.replace(/\D/g, '') : '';
+        const isCurrentDriver =
+          currentUser.id === actualId ||
+          currentUser.id === targetDriverId ||
+          (actualPhone && currentUser.phone === actualPhone) ||
+          (targetPhone && currentUser.phone === targetPhone) ||
+          (cleanPhone && cClean && (cClean === cleanPhone || cClean.endsWith(cleanPhone) || cleanPhone.endsWith(cClean)));
+        if (isCurrentDriver) {
+          if (currentUser.id) allAliases.add(currentUser.id);
+          if (currentUser.phone) allAliases.add(currentUser.phone);
+        }
+      }
+
+      // Synchronize any pre-existing keys in the map that match cleanPhone or ID
+      for (const k of Object.keys(prev)) {
+        const kClean = k.replace(/\D/g, '');
+        if (
+          (cleanPhone && kClean && (kClean === cleanPhone || kClean.endsWith(cleanPhone) || cleanPhone.endsWith(kClean))) ||
+          k === actualId ||
+          k === targetDriverId
+        ) {
+          allAliases.add(k);
+        }
+      }
+
+      for (const a of allAliases) {
+        updated[a] = newBalUsd;
+      }
+
       try {
         localStorage.setItem('wadaage_driver_wallets_map', JSON.stringify(updated));
         localStorage.setItem('wadaage_v2_wallets', JSON.stringify(updated));
+        localStorage.setItem('wadaage_driver_wallet_balance', JSON.stringify(newBalUsd));
       } catch (e) {
         console.error(e);
       }
@@ -4125,7 +4168,26 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const commissionUsd = 0.10;
 
     // 1. Immediate optimistic reactive state mutation across all key aliases (ID, phone, cleanPhone, drivers array, currentUser, localStorage)
-    applyDriverBalanceUpdate(targetDriverId, targetDriverPhone, -commissionUsd, false);
+    const deductedNewBalUsd = applyDriverBalanceUpdate(targetDriverId, targetDriverPhone, -commissionUsd, false);
+
+    const commTx: DriverWalletTransaction = {
+      id: `dtx_dropoff_${Date.now()}`,
+      driverId: targetDriverId,
+      driverPhone: targetDriverPhone,
+      driverName: completedRideObj.driverName || 'Captain',
+      type: 'commission_deduction',
+      amountUsd: -commissionUsd,
+      amountSos: -commissionSos,
+      newBalanceUsd: deductedNewBalUsd,
+      title: `Ride Drop-Off Commission Deducted (-1,000 SLSH) (Ride #${completedRideObj.id.slice(-6)})`,
+      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'completed',
+      rideId: completedRideObj.id,
+      referenceId: `COMM-${completedRideObj.id.slice(-6)}`,
+    };
+
+    setDriverWalletTransactions((prev) => [commTx, ...prev]);
+    saveTransactionToFirestore(commTx);
 
     // 2. Execute server ledger finish endpoint to commit transaction to MySQL/memory store
     try {
@@ -4134,14 +4196,16 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           driverId: targetDriverId,
+          driverPhone: targetDriverPhone,
           finalFare: totalCollectedFare,
+          newBalanceUsd: deductedNewBalUsd,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (data && data.success && data.commissionTx && data.commissionTx.newBalanceUsd !== undefined) {
-          const serverBal = Number(data.commissionTx.newBalanceUsd);
+        if (data && data.success && data.newBalanceUsd !== undefined) {
+          const serverBal = Number(data.newBalanceUsd);
           applyDriverBalanceUpdate(targetDriverId, targetDriverPhone, serverBal, true);
         }
       }
@@ -4149,31 +4213,18 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('[Trip Completion] Server ledger finish call background sync:', err);
     }
 
-    const commTx: DriverWalletTransaction = {
-      id: `dtx_dropoff_${Date.now()}`,
-      driverId: targetDriverId,
-      type: 'commission_deduction',
-      amountUsd: -commissionUsd,
-      amountSos: -commissionSos,
-      title: `Ride Drop-Off Commission Deducted (-1,000 SLSH) (Ride #${completedRideObj.id.slice(-6)})`,
-      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      status: 'completed',
-      rideId: completedRideObj.id,
-    };
-
-    setDriverWalletTransactions((prev) => [commTx, ...prev]);
-    saveTransactionToFirestore(commTx);
-
     const minThresholdUsd = pricing.driverMinWalletThresholdUsd || 0.10;
-
-    const latestDriverBal = getDriverWalletBalance(targetDriverId) || getDriverWalletBalance(targetDriverPhone) || 0;
+    const latestDriverBal = deductedNewBalUsd;
 
     // Add collected fare to driver earnings across matching drivers
     setDrivers((prev) =>
       prev.map((d) => {
+        const dClean = d.phone ? d.phone.replace(/\D/g, '') : '';
+        const targetClean = targetDriverPhone ? targetDriverPhone.replace(/\D/g, '') : '';
         const isMatch =
           d.id === targetDriverId ||
           (targetDriverPhone && d.phone === targetDriverPhone) ||
+          (targetClean && dClean && (dClean === targetClean || dClean.endsWith(targetClean) || targetClean.endsWith(dClean))) ||
           (currentUser?.id && d.id === currentUser.id) ||
           (currentUser?.phone && d.phone === currentUser.phone);
 
@@ -4181,9 +4232,10 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return {
             ...d,
             walletBalanceUsd: latestDriverBal,
-            todayEarnings: Math.round((d.todayEarnings + totalCollectedFare) * 100) / 100,
-            weeklyEarnings: Math.round((d.weeklyEarnings + totalCollectedFare) * 100) / 100,
-            totalTrips: d.totalTrips + 1,
+            wallet_balance_usd: latestDriverBal,
+            todayEarnings: Math.round(((d.todayEarnings || 0) + totalCollectedFare) * 100) / 100,
+            weeklyEarnings: Math.round(((d.weeklyEarnings || 0) + totalCollectedFare) * 100) / 100,
+            totalTrips: (d.totalTrips || 0) + 1,
             status: latestDriverBal < minThresholdUsd ? 'offline' : d.status,
           };
         }
@@ -4191,10 +4243,23 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    const targetDrv = drivers.find((d) => d.id === targetDriverId || d.phone === targetDriverId);
+    // Also update currentUser if active driver
+    if (currentUser && currentUser.role === 'driver') {
+      setCurrentUser((prevUser) =>
+        prevUser
+          ? {
+              ...prevUser,
+              walletBalanceUsd: latestDriverBal,
+              wallet_balance_usd: latestDriverBal,
+            }
+          : null
+      );
+    }
+
+    const targetDrv = drivers.find((d) => d.id === targetDriverId || d.phone === targetDriverPhone);
     broadcastRideEvent('DRIVER_WALLET_UPDATED', {
       driverId: targetDriverId,
-      driverPhone: targetDrv?.phone,
+      driverPhone: targetDriverPhone || targetDrv?.phone,
       amountUsd: -commissionUsd,
       amountSos: -commissionSos,
       newBalanceUsd: latestDriverBal,
