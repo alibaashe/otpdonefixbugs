@@ -1807,33 +1807,24 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Helper to check ownership of ride for current logged-in passenger
         const isMyPassengerRide = (r: RideRequest) => {
-          if (currentUser?.id && r.passengerId === currentUser.id) return true;
-          if (currentUser?.phone && r.passengerPhone === currentUser.phone) return true;
-          if (currentRide && currentRide.id === r.id) return true;
+          if (!r) return false;
+          if (currentUser?.id && (r.passengerId === currentUser.id || r.passengerId === `user_${currentUser.id}`)) return true;
+          if (currentUser?.phone && r.passengerPhone && (r.passengerPhone === currentUser.phone || r.passengerPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))) return true;
+          if (role === 'passenger' && currentRide && currentRide.id === r.id && (currentRide.passengerId === r.passengerId || currentRide.passengerPhone === r.passengerPhone)) return true;
           return false;
         };
 
         // Helper to check ownership of ride for current logged-in driver
         const isMyDriverRide = (r: RideRequest) => {
           if (!r) return false;
-          if (currentRide && currentRide.id === r.id) return true;
-          const savedCurrentRide = (() => {
-            try {
-              const s = localStorage.getItem('wadaage_current_ride');
-              return s ? JSON.parse(s) : null;
-            } catch {
-              return null;
-            }
-          })();
-          if (savedCurrentRide && savedCurrentRide.id === r.id) return true;
-
           if (currentUser) {
             const cId = currentUser.id;
             const dId = r.assignedDriverId;
             if (dId && (dId === cId || dId === `drv_${cId}` || cId === `drv_${dId}`)) return true;
-            if (currentUser.phone && r.driverPhone && currentUser.phone === r.driverPhone) return true;
+            if (currentUser.phone && r.driverPhone && (currentUser.phone === r.driverPhone || currentUser.phone.replace(/\D/g, '') === r.driverPhone.replace(/\D/g, ''))) return true;
           }
-          if (r.assignedDriverId && (r.assignedDriverId === 'drv_01' || r.assignedDriverId === 'live_driver')) return true;
+          if (role === 'driver' && r.assignedDriverId && (r.assignedDriverId === 'drv_01' || r.assignedDriverId === 'live_driver')) return true;
+          if (role === 'driver' && currentRide && currentRide.id === r.id && (currentRide.assignedDriverId === currentUser?.id || currentRide.assignedDriverId === `drv_${currentUser?.id}`)) return true;
           return false;
         };
 
@@ -2040,16 +2031,17 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const isMyPassengerRide = (r: any) => {
         if (!r) return false;
-        if (currentUser?.id && r.passengerId === currentUser.id) return true;
-        if (currentUser?.phone && r.passengerPhone === currentUser.phone) return true;
-        if (currentRide && currentRide.id === r.id) return true;
+        if (currentUser?.id && (r.passengerId === currentUser.id || r.passengerId === `user_${currentUser.id}`)) return true;
+        if (currentUser?.phone && r.passengerPhone && (r.passengerPhone === currentUser.phone || r.passengerPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))) return true;
+        if (role === 'passenger' && currentRide && currentRide.id === r.id && (currentRide.passengerId === r.passengerId || currentRide.passengerPhone === r.passengerPhone)) return true;
         return false;
       };
 
       const isMyDriverRide = (r: any) => {
         if (!r) return false;
         if (currentUser?.id && (r.assignedDriverId === currentUser.id || r.assignedDriverId === `drv_${currentUser.id}`)) return true;
-        if (currentUser?.phone && r.driverPhone === currentUser.phone) return true;
+        if (currentUser?.phone && r.driverPhone && (currentUser.phone === r.driverPhone || currentUser.phone.replace(/\D/g, '') === r.driverPhone.replace(/\D/g, ''))) return true;
+        if (role === 'driver' && currentRide && currentRide.id === r.id && (currentRide.assignedDriverId === currentUser?.id || currentRide.assignedDriverId === `drv_${currentUser?.id}`)) return true;
         return false;
       };
 
@@ -4052,7 +4044,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Driver Decline Ride (Sequential Proximity Dispatching: immediately advance to next nearest driver)
   const declineRideByDriver = async (decliningDriverId?: string) => {
     notificationService.stopEmergencyOrderRingtone();
-    const targetRide = incomingDriverRequest || currentRide;
+    const targetRide = incomingDriverRequest || (currentRide?.status === 'searching' ? currentRide : null);
     const driverId = decliningDriverId || currentUser?.id || (targetRide?.currentOfferedDriverId || '');
 
     if (targetRide) {
@@ -4071,7 +4063,12 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'searching',
       };
 
-      setCurrentRide(reassigned);
+      // Only update local currentRide if current user is the PASSENGER who created this order
+      if (role === 'passenger' || (currentRide && currentRide.id === targetRide.id && currentRide.passengerId === currentUser?.id)) {
+        setCurrentRide(reassigned);
+      }
+
+      // Clear the incoming request for the declining driver
       setIncomingDriverRequest(null);
 
       // Atomic decline registration on server and Firestore
