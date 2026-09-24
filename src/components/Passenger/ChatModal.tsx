@@ -40,11 +40,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({ onClose, viewerRole }) => 
       },
     };
 
-  const primaryRiderName = currentRide?.passengerName || 'Axmed Diiriye';
-  const primaryRiderPhone = currentRide?.passengerPhone || '+252 63 4918201';
+  const primaryRiderName = currentRide?.passengerName || 'Passenger';
+  const primaryRiderPhone = currentRide?.passengerPhone || '';
 
-  const coRiderName = currentRide?.coPassenger?.name || 'Rider B';
-  const coRiderPhone = '+252 63 4819202';
+  const coRiderName = currentRide?.coPassenger?.name || 'Co-Passenger';
+  const coRiderPhone = currentRide?.coPassenger?.phone || '';
 
   const passengerName = selectedRiderTab === 'RIDER_B' && currentRide?.coPassenger ? coRiderName : primaryRiderName;
   const passengerPhone = selectedRiderTab === 'RIDER_B' && currentRide?.coPassenger ? coRiderPhone : primaryRiderPhone;

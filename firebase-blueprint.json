@@ -226,6 +226,24 @@
     "/support_tickets/{ticketId}": {
       "schema": "SupportTicket",
       "description": "SOS emergency alerts and customer support incident tickets"
+    },
+    "/rides/{rideId}/calls/{callId}": {
+      "description": "Active in-app WebRTC voice call sessions"
+    },
+    "/rides/{rideId}/call_signals/{signalId}": {
+      "description": "WebRTC SDP offer/answer signals and ICE candidate packets"
+    },
+    "/vehicles/{vehicleId}": {
+      "description": "Driver vehicle fuel economy profiles and efficiency ratings"
+    },
+    "/fuel_logs/{logId}": {
+      "description": "Driver fuel fill-up logs and station purchase records"
+    },
+    "/driving_sessions/{sessionId}": {
+      "description": "Real-time driving distance, fuel consumption, and GPS telemetry"
+    },
+    "/fuel_daily_reports/{reportId}": {
+      "description": "Daily fuel efficiency summaries and savings analytics"
     }
   }
 }

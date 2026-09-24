@@ -59,7 +59,7 @@ export const DriverAccountView: React.FC<DriverAccountViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-400 mt-1">
-              Phone: <b className="text-slate-200">+252 63 4112233</b> • Joined: <b className="text-slate-200">Jan 2025</b>
+              Phone: <b className="text-slate-200">{driver.phone || '+252 63 6807814'}</b> • Joined: <b className="text-slate-200">Jan 2025</b>
             </p>
 
             <div className="flex items-center justify-center sm:justify-start space-x-4 mt-3 text-xs">

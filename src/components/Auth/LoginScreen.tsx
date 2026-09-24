@@ -305,6 +305,16 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
+          // Duplicate phone number validation
+          const existingRider = findRegisteredRider(cleanFullPhone) || findRegisteredRider(cleanPhone);
+          if (existingRider) {
+            setIsSubmitting(false);
+            setFormError(language === 'so'
+              ? 'Lambarkani hore ayuu u diiwaangashanaa. Fadlan gal akoonkaaga (Please login instead).'
+              : 'This phone number is already registered. Please login instead.');
+            return;
+          }
+
           setPendingRegistrationData({
             role: 'passenger',
             fullName: fullName.trim(),
@@ -365,6 +375,16 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
+          // Duplicate driver phone check
+          const { driver: existingDriver, application: existingApp } = findDriverRecord(cleanFullPhone);
+          if (existingDriver || existingApp) {
+            setIsSubmitting(false);
+            setFormError(language === 'so'
+              ? 'Lambarkani hore ayuu u diiwaangashanaa. Fadlan gal akoonkaaga (Please login instead).'
+              : 'This phone number is already registered. Please login instead.');
+            return;
+          }
+
           const effectiveCategory: VehicleCategory = driverServiceChoice;
 
           setPendingRegistrationData({
@@ -411,8 +431,8 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
-          const storedPassword = existingDriver?.password || existingApp?.password || 'WadaageDriver123!';
-          if (password.trim() !== storedPassword && password.trim() !== 'WadaageDriver123!') {
+          const storedPassword = existingDriver?.password || existingApp?.password;
+          if (!storedPassword || password.trim() !== storedPassword) {
             setIsSubmitting(false);
             setFormError(
               language === 'so'
@@ -481,7 +501,7 @@ export const LoginScreen: React.FC = () => {
     const isSuperAdminEmail =
       cleanInput === 'baashe2002@gmail.com' || cleanInput === 'baashe2002' || cleanInput === 'admin@wadaage.com';
     const isSuperAdminPhone =
-      cleanInput === '0634918201' || cleanInput === '00252634918201' || cleanInput === '+252634918201';
+      cleanInput === '0636807814' || cleanInput === '6807814' || cleanInput === '+252636807814' || cleanInput === '00252636807814';
 
     const isAuthorized = (isSuperAdminEmail || isSuperAdminPhone) && password === 'WadaagBankkkk@123';
     const isStaff =
@@ -497,7 +517,7 @@ export const LoginScreen: React.FC = () => {
       id: 'super_admin_baashe',
       name: isAuthorized ? 'Baashe (Super Admin)' : 'Staff Administrator',
       email: cleanInput.includes('@') ? cleanInput : 'baashe2002@gmail.com',
-      phone: '+252 63 4918201',
+      phone: '+252 63 6807814',
       role: 'admin',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
     };

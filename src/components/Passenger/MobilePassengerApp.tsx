@@ -859,7 +859,7 @@ export const MobilePassengerApp: React.FC = () => {
                 <h3 className="font-black text-base text-slate-900 truncate">
                   {currentUser?.name || 'Wadaage Passenger'}
                 </h3>
-                <p className="text-xs text-slate-500 font-mono">{currentUser?.phone || '+252 63 4918201'}</p>
+                <p className="text-xs text-slate-500 font-mono">{currentUser?.phone || ''}</p>
                 <div className="flex items-center space-x-1 text-emerald-600 font-bold text-xs mt-1">
                   <span>⭐ 5.0 Rakaab Qiimo Sare leh</span>
                 </div>
@@ -1314,7 +1314,7 @@ export const MobilePassengerApp: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">{currentUser?.name || 'Wadaage Rider'}</h3>
-                  <p className="text-xs text-slate-500 font-mono">{currentUser?.phone || '+252 63 4918201'}</p>
+                  <p className="text-xs text-slate-500 font-mono">{currentUser?.phone || ''}</p>
                 </div>
               </div>
 

@@ -153,6 +153,7 @@ export interface DriverApplication {
 export interface SharedCoPassenger {
   id: string;
   name: string;
+  phone?: string;
   avatar: string;
   pickupLocation: LocationNode;
   dropoffLocation: LocationNode;

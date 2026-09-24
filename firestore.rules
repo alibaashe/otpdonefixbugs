@@ -65,6 +65,14 @@ service cloud.firestore {
         allow read, create, update: if true;
         allow delete: if isAdmin();
       }
+
+      match /calls/{callId} {
+        allow read, write: if true;
+      }
+
+      match /call_signals/{signalId} {
+        allow read, write: if true;
+      }
     }
 
     // System Settings (Pricing matrices, exchange rate, fees)
@@ -96,6 +104,26 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if true;
       allow delete: if isAdmin();
+    }
+
+    // Vehicles (Fuel economy profile & diagnostic stats)
+    match /vehicles/{vehicleId} {
+      allow read, write: if true;
+    }
+
+    // Fuel Logs
+    match /fuel_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Driving Sessions
+    match /driving_sessions/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Fuel Daily Reports
+    match /fuel_daily_reports/{reportId} {
+      allow read, write: if true;
     }
   }
 }

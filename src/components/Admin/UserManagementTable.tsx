@@ -342,6 +342,17 @@ export const UserManagementTable: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<'Passenger' | 'Driver' | 'Sub-Admin'>('Passenger');
+  const [formPassword, setFormPassword] = useState('');
+
+  const handleGeneratePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let generated = 'Wad#';
+    for (let i = 0; i < 6; i++) {
+      generated += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    generated += `${Math.floor(10 + Math.random() * 90)}`;
+    setFormPassword(generated);
+  };
 
   const filtered = users.filter(
     (u) =>
@@ -385,6 +396,7 @@ export const UserManagementTable: React.FC = () => {
     setFormEmail('');
     setFormPhone('');
     setFormRole('Passenger');
+    setFormPassword('');
     setIsModalOpen(true);
   };
 
@@ -394,6 +406,7 @@ export const UserManagementTable: React.FC = () => {
     setFormEmail(u.email);
     setFormPhone(u.phone);
     setFormRole(u.role);
+    setFormPassword('');
     setIsModalOpen(true);
   };
 
@@ -411,11 +424,14 @@ export const UserManagementTable: React.FC = () => {
       });
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
+    let targetUserId = '';
+
     if (editingUser) {
+      targetUserId = editingUser.id;
       const updatedUser: UserRecord = {
         ...editingUser,
         name: formName.trim(),
@@ -437,8 +453,9 @@ export const UserManagementTable: React.FC = () => {
         role: formRole === 'Sub-Admin' ? 'admin' : formRole === 'Driver' ? 'driver' : 'passenger',
       });
     } else {
+      targetUserId = `usr_${Date.now()}`;
       const newUser: UserRecord = {
-        id: `usr_${Date.now()}`,
+        id: targetUserId,
         name: formName.trim(),
         email: formEmail.trim() || `${formName.trim().toLowerCase().replace(/\s+/g, '.')}@wadaage.com`,
         phone: formPhone.trim() || '+252 63 0000000',
@@ -458,6 +475,18 @@ export const UserManagementTable: React.FC = () => {
         role: formRole === 'Sub-Admin' ? 'admin' : formRole === 'Driver' ? 'driver' : 'passenger',
       });
     }
+
+    // Securely hash and update password on server if entered
+    if (formPassword.trim()) {
+      try {
+        await fetch(`/api/admin/users/${targetUserId}/password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: formPassword.trim() }),
+        });
+      } catch (_e) {}
+    }
+
     setIsModalOpen(false);
   };
 
@@ -848,6 +877,27 @@ export const UserManagementTable: React.FC = () => {
                   placeholder="e.g. +252 63 4556677"
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-400">Edit Password (Hashed Securely)</label>
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    className="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                  >
+                    Generate Strong Password
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={formPassword}
+                  onChange={(e) => setFormPassword(e.target.value)}
+                  placeholder={editingUser ? "Leave blank to keep existing password" : "Enter account password"}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Passwords are securely hashed before insertion into the database.</p>
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">

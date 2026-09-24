@@ -28,24 +28,43 @@ export const DriverApprovalTable: React.FC = () => {
   const [editingPasswordId, setEditingPasswordId] = useState<string | null>(null);
   const [newDriverPassword, setNewDriverPassword] = useState<string>('');
 
-  const handleUpdateDriverPassword = (app: DriverApplication) => {
-    if (!newDriverPassword || newDriverPassword.trim().length < 4) {
-      setActionSuccessMessage('⚠️ Password-ku waa inuu ka koobnaadaa uguyaraan 4 xaraf (Minimum 4 chars)');
+  const handleUpdateDriverPassword = async (app: DriverApplication) => {
+    if (!newDriverPassword || newDriverPassword.trim().length < 6) {
+      setActionSuccessMessage('⚠️ Password-ku waa inuu ka koobnaadaa uguyaraan 6 xaraf (Minimum 6 chars)');
       setTimeout(() => setActionSuccessMessage(null), 3000);
       return;
     }
 
-    app.password = newDriverPassword.trim();
+    const trimmedPassword = newDriverPassword.trim();
+    app.password = trimmedPassword;
     const matchingDriver = drivers.find((d) => d.phone === app.phone || d.name === app.fullName);
     if (matchingDriver) {
-      matchingDriver.password = newDriverPassword.trim();
+      matchingDriver.password = trimmedPassword;
       saveDriverToFirestore(matchingDriver);
+      // Sync to backend password update endpoint
+      try {
+        await fetch(`/api/admin/users/${matchingDriver.id}/password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: trimmedPassword }),
+        });
+      } catch (_e) {}
     }
 
     setEditingPasswordId(null);
     setNewDriverPassword('');
     setActionSuccessMessage(`🔑 Erayga sirta ah ee darawalka ${app.fullName} si guul leh ayaa loo beddelay!`);
     setTimeout(() => setActionSuccessMessage(null), 3500);
+  };
+
+  const handleGeneratePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let generated = 'Wad#';
+    for (let i = 0; i < 6; i++) {
+      generated += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    generated += `${Math.floor(10 + Math.random() * 90)}`;
+    setNewDriverPassword(generated);
   };
 
   const handleStatusChange = (appId: string, status: 'approved' | 'hold' | 'rejected', driverName: string, note?: string) => {
@@ -246,7 +265,7 @@ export const DriverApprovalTable: React.FC = () => {
                         <p>
                           <strong>Driver Password:</strong>{' '}
                           <span className="font-mono font-bold text-emerald-500">
-                            {app.password || 'WadaageDriver123!'}
+                            {app.password || 'Set via Admin below'}
                           </span>
                         </p>
                       </div>
@@ -254,13 +273,23 @@ export const DriverApprovalTable: React.FC = () => {
                       {/* Set / Reset Password UI */}
                       {editingPasswordId === app.id ? (
                         <div className="pt-2 space-y-1.5">
-                          <input
-                            type="text"
-                            value={newDriverPassword}
-                            onChange={(e) => setNewDriverPassword(e.target.value)}
-                            placeholder="New Driver Password..."
-                            className="w-full bg-white dark:bg-slate-900 border border-amber-400 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none"
-                          />
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={newDriverPassword}
+                              onChange={(e) => setNewDriverPassword(e.target.value)}
+                              placeholder="New Driver Password..."
+                              className="flex-1 bg-white dark:bg-slate-900 border border-amber-400 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleGeneratePassword}
+                              className="px-2 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-[10px] shrink-0"
+                              title="Generate Random Password"
+                            >
+                              Generate
+                            </button>
+                          </div>
                           <div className="flex space-x-1.5">
                             <button
                               onClick={() => handleUpdateDriverPassword(app)}
@@ -281,7 +310,7 @@ export const DriverApprovalTable: React.FC = () => {
                           <button
                             onClick={() => {
                               setEditingPasswordId(app.id);
-                              setNewDriverPassword(app.password || 'WadaageDriver123!');
+                              setNewDriverPassword(app.password || '');
                             }}
                             className="px-2 py-1 bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded text-[10px] flex items-center space-x-1 border border-indigo-500/30"
                           >

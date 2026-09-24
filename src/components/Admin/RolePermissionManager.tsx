@@ -94,7 +94,7 @@ const INITIAL_STAFF: StaffRole[] = [
     id: 'staff_1',
     name: 'Baashe (Super Admin)',
     email: 'baashe2002@gmail.com',
-    phone: '0634918201',
+    phone: '+252 63 6807814',
     role: 'Super Admin',
     status: 'Active',
     createdAt: '2026-01-15',

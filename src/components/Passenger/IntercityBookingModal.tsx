@@ -327,7 +327,7 @@ export const IntercityBookingModal: React.FC<IntercityBookingModalProps> = ({
                     value={passengerPhone}
                     onChange={(e) => setPassengerPhone(e.target.value)}
                     className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-teal-500"
-                    placeholder="e.g. +252 63 4918201"
+                    placeholder="e.g. +252 63 6807814"
                   />
                 </div>
               </div>

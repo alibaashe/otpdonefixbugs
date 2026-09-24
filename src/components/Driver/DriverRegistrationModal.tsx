@@ -39,45 +39,46 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
   initialName,
   onSuccess,
 }) => {
-  const { submitDriverApplication, login, registerDriver } = useRide();
+  const { submitDriverApplication, login, registerDriver, drivers, driverApplications } = useRide();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
-    fullName: initialName || 'Cabdillaahi Xasan Cali',
-    phone: initialPhone || '00252636807814',
-    password: 'DriverSecret123!',
-    confirmPassword: 'DriverSecret123!',
-    address: 'Xaafada Jigjiga Yar, Degmada Ibrahim Koodbuur, Hargeysa',
+    fullName: initialName || '',
+    phone: initialPhone || '',
+    password: '',
+    confirmPassword: '',
+    address: '',
 
     // Guarantor / Responsible Person (Dammaanad-qaade)
-    guarantorName: 'Xaaji Ismaaciil Warsame',
-    guarantorPhone: '00252634409988',
-    guarantorRelationship: 'Adeer (Uncle) & Hargeisa Business Owner',
-    guarantorAddress: 'Suuqa Barta, 26 June District, Hargeisa',
+    guarantorName: '',
+    guarantorPhone: '',
+    guarantorRelationship: '',
+    guarantorAddress: '',
 
     // Somaliland ID & Driver License
-    somalilandIdNumber: 'SL-ID-884920',
-    somalilandLicenseNumber: 'SL-DL-99302',
+    somalilandIdNumber: '',
+    somalilandLicenseNumber: '',
 
     // Vehicle Details
     vehicleCategory: 'wadaage_taxi' as VehicleCategory,
-    make: 'Toyota',
-    model: 'Vitz 2019',
-    color: 'White',
-    licensePlate: 'SL-77890-A',
+    make: '',
+    model: '',
+    color: '',
+    licensePlate: '',
 
     // Payout Wallet
     walletProvider: 'zaad',
-    walletNumber: initialPhone || '00252636807814',
+    walletNumber: initialPhone || '',
   });
 
   // Uploaded document photo URLs / filenames
   const [documents, setDocuments] = useState({
-    somalilandIdPhoto: { uploaded: true, fileName: 'Aqoonsiga_Somaliland_ID.jpg', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80' },
-    somalilandLicensePhoto: { uploaded: true, fileName: 'Ruqsadda_Gaadhiga_License.jpg', url: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&auto=format&fit=crop&q=80' },
-    driverPhoto: { uploaded: true, fileName: 'Sawirka_Darawalka.jpg', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80' },
-    vehiclePhoto: { uploaded: true, fileName: 'Sawirka_Gaadhiga.jpg', url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600&auto=format&fit=crop&q=80' },
+    somalilandIdPhoto: { uploaded: false, fileName: '', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80' },
+    somalilandLicensePhoto: { uploaded: false, fileName: '', url: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&auto=format&fit=crop&q=80' },
+    driverPhoto: { uploaded: false, fileName: '', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80' },
+    vehiclePhoto: { uploaded: false, fileName: '', url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600&auto=format&fit=crop&q=80' },
   });
 
   const [submittedAppId, setSubmittedAppId] = useState<string | null>(null);
@@ -96,9 +97,31 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+
+    const cleanDigits = formData.phone.replace(/\D/g, '');
+    if (!cleanDigits) {
+      setErrorMessage('Please enter a valid phone number.');
+      return;
+    }
+
+    const isDuplicate = drivers.some(d => d.phone && d.phone.replace(/\D/g, '') === cleanDigits) ||
+      driverApplications.some(a => a.phone && a.phone.replace(/\D/g, '') === cleanDigits);
+
+    if (isDuplicate) {
+      setErrorMessage('This phone number is already registered. Please login instead.');
+      return;
+    }
+
+    if (formData.password && formData.password !== formData.confirmPassword) {
+      setErrorMessage('Passwords do not match. Please re-enter.');
+      return;
+    }
+
     const app = submitDriverApplication({
       fullName: formData.fullName,
       phone: formData.phone,
+      password: formData.password || undefined,
       address: formData.address,
       somalilandIdNumber: formData.somalilandIdNumber,
       somalilandIdPhoto: documents.somalilandIdPhoto.url,
@@ -113,9 +136,9 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
       },
       vehicle: {
         category: formData.vehicleCategory,
-        model: `${formData.make} ${formData.model}`,
-        color: formData.color,
-        licensePlate: formData.licensePlate,
+        model: `${formData.make} ${formData.model}`.trim() || 'Toyota Vitz',
+        color: formData.color.trim() || 'White',
+        licensePlate: formData.licensePlate.trim() || `SL-${Math.floor(10000 + Math.random() * 90000)}`,
         photoUrl: documents.vehiclePhoto.url,
       },
     });
@@ -125,10 +148,11 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
     registerDriver({
       name: formData.fullName,
       phone: formData.phone,
+      password: formData.password || undefined,
       vehicleCategory: formData.vehicleCategory,
-      vehicleModel: `${formData.make} ${formData.model}`,
-      vehicleColor: formData.color,
-      licensePlate: formData.licensePlate,
+      vehicleModel: `${formData.make} ${formData.model}`.trim() || 'Toyota Vitz',
+      vehicleColor: formData.color.trim() || 'White',
+      licensePlate: formData.licensePlate.trim() || `SL-${Math.floor(10000 + Math.random() * 90000)}`,
     });
 
     if (onSuccess) {
@@ -199,6 +223,12 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
+            {errorMessage && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
             {/* Step Progress Indicator Bar */}
             <div className="bg-slate-100 dark:bg-slate-800/80 p-2 rounded-2xl border border-slate-200/80 dark:border-slate-700/60">
               <div className="grid grid-cols-4 gap-1 text-center text-[10px] font-extrabold">

@@ -677,6 +677,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(30) NOT NULL,
   name VARCHAR(120) NOT NULL,
   email VARCHAR(120) NULL,
+  password_hash VARCHAR(255) NULL,
   role ENUM('passenger', 'driver', 'admin', 'dispatcher', 'support') DEFAULT 'passenger',
   status ENUM('active', 'suspended', 'blocked') DEFAULT 'active',
   avatar_url VARCHAR(500) NULL,
@@ -690,7 +691,7 @@ CREATE TABLE IF NOT EXISTS users (
   total_trips INT DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_users_phone_role (phone, role),
+  UNIQUE KEY uq_users_phone (phone),
   INDEX idx_users_phone (phone),
   INDEX idx_users_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -701,6 +702,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   user_id VARCHAR(64) NULL,
   name VARCHAR(120) NOT NULL,
   phone VARCHAR(30) NOT NULL,
+  password_hash VARCHAR(255) NULL,
   status ENUM('available', 'busy', 'offline') DEFAULT 'offline',
   vehicle_category VARCHAR(50) DEFAULT 'wadaage_taxi',
   vehicle_model VARCHAR(80) DEFAULT 'Toyota Vitz',
@@ -713,6 +715,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   wallet_balance_usd DECIMAL(10,2) DEFAULT 0.00,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_drivers_phone (phone),
   INDEX idx_drivers_phone (phone),
   INDEX idx_drivers_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -67,20 +67,14 @@ export const ActiveRideCard: React.FC<ActiveRideCardProps> = ({ onOpenSafetyModa
 
   const matchedDriver = currentRide.assignedDriverId ? drivers.find((d) => d.id === currentRide.assignedDriverId) : null;
   const driverVehicle = (matchedDriver as any)?.vehicle || {};
-  // Dynamically map from driver_name field in database/active trip object, strictly avoiding placeholder text or rider name bleed
-  let resolvedDriverName = (currentRide as any).driver_name || currentRide.driverName || matchedDriver?.name;
-  if (!resolvedDriverName || resolvedDriverName.toLowerCase().includes('rider') || resolvedDriverName.includes('0000')) {
-    resolvedDriverName = matchedDriver?.name || 'Maxamed Cumar Jaamac';
-  }
+  // Dynamically map from driver_name field in database/active trip object, strictly eliminating fake placeholders
+  const resolvedDriverName = (currentRide as any).driver_name || currentRide.driverName || matchedDriver?.name || 'Wadaage Captain';
   const driverName = currentRide.status === 'searching' ? 'Raadinta darawalka...' : resolvedDriverName;
-  const driverPhone = (currentRide as any).driver_phone || currentRide.driverPhone || matchedDriver?.phone || '+252 63 4421908';
+  const driverPhone = (currentRide as any).driver_phone || currentRide.driverPhone || matchedDriver?.phone || '';
   const driverAvatar = (currentRide as any).driver_avatar || currentRide.driverAvatar || matchedDriver?.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80';
-  const driverRating = matchedDriver?.rating || 4.95;
+  const driverRating = matchedDriver?.rating || 5.0;
   const vehicleModel = (currentRide as any).vehicle_model || currentRide.vehicleModel || driverVehicle.model || (matchedDriver as any)?.vehicle_model || 'Toyota Vitz';
-  let vehiclePlate = (currentRide as any).license_plate || currentRide.licensePlate || driverVehicle.licensePlate || (matchedDriver as any)?.vehicle_plate;
-  if (!vehiclePlate || vehiclePlate === 'SL-24810') {
-    vehiclePlate = matchedDriver?.vehicle?.licensePlate || 'SL-2044';
-  }
+  const vehiclePlate = (currentRide as any).license_plate || currentRide.licensePlate || driverVehicle.licensePlate || (matchedDriver as any)?.vehicle_plate || 'SL-24810';
   const vehicleColor = driverVehicle.color || (matchedDriver as any)?.vehicle_color || 'White';
 
   const assignedDriver = {
@@ -188,7 +182,7 @@ export const ActiveRideCard: React.FC<ActiveRideCardProps> = ({ onOpenSafetyModa
 
               <button
                 type="button"
-                onClick={() => initiateVoiceCall()}
+                onClick={() => setShowCall(true)}
                 className="p-2.5 rounded-xl bg-slate-800 text-emerald-400 hover:bg-slate-700 transition text-xs font-bold flex items-center justify-center active:scale-95 cursor-pointer shadow-sm"
                 title="Call Driver"
               >
@@ -507,9 +501,7 @@ export const ActiveRideCard: React.FC<ActiveRideCardProps> = ({ onOpenSafetyModa
                   )}
                 </button>
                 <button
-                  onClick={() => {
-                    initiateVoiceCall();
-                  }}
+                  onClick={() => setShowCall(true)}
                   className="p-2.5 rounded-xl bg-slate-800 text-slate-200 hover:bg-slate-700 transition-all text-xs font-bold flex items-center space-x-1"
                   title="Call Driver"
                 >

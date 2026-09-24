@@ -17,10 +17,10 @@ export const CallDriverModal: React.FC<CallDriverModalProps> = ({ onClose }) => 
   const assignedDriver = matchedDriver || {
     id: 'live_driver',
     name: (currentRide as any)?.driver_name || currentRide?.driverName || 'Wadaage Driver Captain',
-    phone: (currentRide as any)?.driver_phone || currentRide?.driverPhone || '+252 63 4421908',
+    phone: (currentRide as any)?.driver_phone || currentRide?.driverPhone || '',
     avatar: (currentRide as any)?.driver_avatar || currentRide?.driverAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    rating: 4.95,
-    vehicle: { model: 'Toyota Vitz', licensePlate: 'SL-2044', color: 'White' },
+    rating: 5.0,
+    vehicle: { model: (currentRide as any)?.vehicle_model || 'Toyota Vitz', licensePlate: (currentRide as any)?.license_plate || 'SL-24810', color: 'White' },
   };
 
   useEffect(() => {

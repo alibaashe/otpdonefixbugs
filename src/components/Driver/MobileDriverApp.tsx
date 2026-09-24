@@ -11,6 +11,7 @@ import {
   Menu,
   MessageSquare,
   Navigation,
+  Phone,
   PhoneCall,
   Power,
   Shield,
@@ -63,6 +64,9 @@ import { DriverEmergencySosModal } from './DriverEmergencySosModal';
 import { DriverEarningsView } from './DriverEarningsView';
 import { DriverActivityView } from './DriverActivityView';
 import { DriverAccountView } from './DriverAccountView';
+import { DriverSupportTickets } from './DriverSupportTickets';
+import { DriverFatigueModal } from './DriverFatigueModal';
+import { VehicleHealthModal } from './VehicleHealthModal';
 import { DriverRegistrationModal } from './DriverRegistrationModal';
 import { LocationSetupModal } from '../Location/LocationSetupModal';
 import { SomalilandFlag } from '../Common/SomalilandFlag';
@@ -133,6 +137,10 @@ export const MobileDriverApp: React.FC = () => {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
   const [showKycModal, setShowKycModal] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [showFatigueModal, setShowFatigueModal] = useState(false);
+  const [showVehicleHealthModal, setShowVehicleHealthModal] = useState(false);
+  const [showCallPassengerModal, setShowCallPassengerModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferNotice, setTransferNotice] = useState<string | null>(null);
   const [kycAlertMessage, setKycAlertMessage] = useState<string | null>(null);
@@ -525,7 +533,7 @@ export const MobileDriverApp: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={initiateVoiceCall}
+                    onClick={() => setShowCallPassengerModal(true)}
                     className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition"
                     title="Call Passenger"
                   >
@@ -610,18 +618,18 @@ export const MobileDriverApp: React.FC = () => {
 
         {/* 5. SECTION: "New Upcoming Ride" */}
         <div className="space-y-2.5 pt-1">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-black text-slate-900 font-sans">
-              {currentRide && (currentRide.status === 'accepted' || currentRide.status === 'driver_arrived' || currentRide.status === 'in_progress')
-                ? 'Active Trip & Incoming Matches'
-                : 'New Upcoming Ride'}
-            </h3>
-            {incomingDriverRequest && (!currentRide || currentRide.status === 'searching' || currentRide.status === 'idle') && (
-              <span className="text-[10px] font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
-                {requestTimer}s auto-expire
-              </span>
-            )}
-          </div>
+          {(!currentRide || currentRide.status === 'searching' || currentRide.status === 'idle') && (
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 font-sans">
+                New Upcoming Ride
+              </h3>
+              {incomingDriverRequest && (
+                <span className="text-[10px] font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
+                  {requestTimer}s auto-expire
+                </span>
+              )}
+            </div>
+          )}
 
           {/* On-Route Second Rider (Passenger B) Dispatch Overlay ONLY if Driver is in a Wadaage Share trip with 1 rider */}
           {incomingDriverRequest &&
@@ -714,8 +722,7 @@ export const MobileDriverApp: React.FC = () => {
 
           {/* Incoming Dispatch Card & Interactive BottomSheet (Pulsing, 30s rule countdown, Slide-To-Accept) */}
           {(!currentRide || currentRide.status === 'searching' || currentRide.status === 'idle' || currentRide.status === 'cancelled' || currentRide.status === 'completed') &&
-          incomingDriverRequest &&
-          isOrderWithinDriverDispatchRadius(incomingDriverRequest).isWithinRadius ? (
+          incomingDriverRequest ? (
             (() => {
               const req = incomingDriverRequest;
               const radiusCheck = isOrderWithinDriverDispatchRadius(req);
@@ -811,14 +818,21 @@ export const MobileDriverApp: React.FC = () => {
                       <div className="pt-1 space-y-2">
                         <button
                           type="button"
-                          onClick={() => acceptRideByDriver()}
-                          className="w-full py-3.5 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                          onClick={() => {
+                            try {
+                              if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                                navigator.vibrate([30, 20, 30]);
+                              }
+                            } catch (_e) {}
+                            acceptRideByDriver(currentUser?.id);
+                          }}
+                          className="w-full py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none"
                         >
                           <Check className="w-5 h-5 stroke-[3]" />
                           <span>AQBAL DALABKA • ACCEPT ({requestTimer}s)</span>
                         </button>
                         <SlideToAccept
-                          onAccept={() => acceptRideByDriver()}
+                          onAccept={() => acceptRideByDriver(currentUser?.id)}
                           label="Ama u siq si aad u aqbasho"
                           completedLabel="Dalabkii waa la aqbalay!"
                         />
@@ -1038,7 +1052,7 @@ export const MobileDriverApp: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={initiateVoiceCall}
+                    onClick={() => setShowCallPassengerModal(true)}
                     className="py-2 px-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] flex items-center justify-center space-x-1 transition active:scale-95 cursor-pointer"
                     title="Wac / Phone Call"
                   >
@@ -1068,11 +1082,17 @@ export const MobileDriverApp: React.FC = () => {
                 </div>
 
                 {/* Prominent Touch-Friendly Primary Milestone Action Button */}
-                <div className="pt-1">
+                <div className="pt-1.5 space-y-2">
                   {currentRide.coPassenger ? (
                     <button
                       type="button"
+                      id="driver-btn-carpool-action"
                       onClick={() => {
+                        try {
+                          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                            navigator.vibrate([40, 30, 40]);
+                          }
+                        } catch (_e) {}
                         if (activeCarpoolRider === 'A') {
                           if (currentRide.status === 'accepted') advanceIndividualRiderAction('RIDER_A', 'arrived');
                           else if (currentRide.status === 'driver_arrived') advanceIndividualRiderAction('RIDER_A', 'pickup');
@@ -1084,47 +1104,110 @@ export const MobileDriverApp: React.FC = () => {
                           else advanceIndividualRiderAction('RIDER_B', 'dropoff');
                         }
                       }}
-                      className="w-full py-3.5 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full min-h-[58px] py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] active:bg-[#006038] text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-700/40 border-2 border-emerald-400/50 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer touch-manipulation select-none"
                     >
-                      <CheckCircle className="w-4 h-4" />
-                      <span>
+                      <CheckCircle className="w-5 h-5 shrink-0" />
+                      <span className="text-center font-black">
                         {activeCarpoolRider === 'A'
                           ? currentRide.status === 'accepted'
-                            ? '📍 Gaadhay Goobta (Rider A)'
+                            ? '📍 GAADHAY GOOBTA (Rider A Arrived)'
                             : currentRide.status === 'driver_arrived'
-                            ? '🚗 Bilow Safarka (Rider A)'
-                            : '✅ Dhammee Safarka Rider A'
+                            ? '🚗 BILOW SAFARKA (Start Rider A)'
+                            : '✅ DHAMMEE SAFARKA (Complete Rider A)'
                           : currentRide.coPassenger?.status === 'picking_up'
-                          ? '🚗 Bilow Safarka (Rider B)'
+                          ? '🚗 BILOW SAFARKA (Start Rider B)'
                           : currentRide.coPassenger?.status === 'picked_up'
-                          ? '✅ Dhammee Safarka Rider B'
-                          : '📍 Gaadhay Goobta (Rider B)'}
+                          ? '✅ DHAMMEE SAFARKA (Complete Rider B)'
+                          : '📍 GAADHAY GOOBTA (Rider B Arrived)'}
                       </span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        advanceDriverRideState();
-                        if (currentRide.status === 'accepted') {
-                          voiceNavigationService.speak('Arrived at pickup. Waiting for passenger.', 'en', true);
-                        } else if (currentRide.status === 'driver_arrived') {
-                          voiceNavigationService.speak('Trip started. Heading to destination.', 'en', true);
-                        } else if (currentRide.status === 'in_progress') {
-                          voiceNavigationService.speak('Trip completed. Please collect fare.', 'en', true);
+                    <>
+                      <button
+                        type="button"
+                        id="driver-btn-primary-ride-action"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          try {
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                              navigator.vibrate([40, 30, 40]);
+                            }
+                          } catch (_e) {}
+                          advanceDriverRideState();
+                          if (currentRide.status === 'accepted') {
+                            voiceNavigationService.speak('Arrived at pickup. Waiting for passenger.', 'en', true);
+                          } else if (currentRide.status === 'driver_arrived') {
+                            voiceNavigationService.speak('Trip started. Heading to destination.', 'en', true);
+                          } else if (currentRide.status === 'in_progress') {
+                            voiceNavigationService.speak('Trip completed. Please collect fare.', 'en', true);
+                          }
+                        }}
+                        className={`w-full min-h-[58px] py-3.5 px-4 rounded-2xl text-white font-black text-sm uppercase tracking-wider shadow-xl transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer touch-manipulation select-none border-2 ${
+                          currentRide.status === 'accepted'
+                            ? 'bg-[#008751] hover:bg-[#007445] active:bg-[#006038] border-emerald-400/60 shadow-emerald-700/40 ring-4 ring-emerald-500/20'
+                            : currentRide.status === 'driver_arrived'
+                            ? 'bg-[#0066f5] hover:bg-[#0052c2] active:bg-[#00419e] border-blue-300/60 shadow-blue-700/40'
+                            : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border-emerald-300/60 shadow-emerald-700/40'
+                        }`}
+                      >
+                        {currentRide.status === 'accepted' ? (
+                          <MapPin className="w-6 h-6 shrink-0 animate-bounce text-emerald-100" />
+                        ) : currentRide.status === 'driver_arrived' ? (
+                          <Car className="w-6 h-6 shrink-0 text-blue-100" />
+                        ) : (
+                          <CheckCircle className="w-6 h-6 shrink-0 text-emerald-100" />
+                        )}
+                        <div className="flex flex-col items-center justify-center text-center leading-tight">
+                          <span className="text-sm sm:text-base font-extrabold tracking-wide">
+                            {currentRide.status === 'accepted'
+                              ? '📍 WAAN GAADHAY • I HAVE ARRIVED'
+                              : currentRide.status === 'driver_arrived'
+                              ? '🚗 BILOW SAFARKA • START TRIP'
+                              : '✅ DHAMMEE SAFARKA • COMPLETE TRIP'}
+                          </span>
+                          <span className="text-[10px] font-bold opacity-90 tracking-normal normal-case pt-0.5">
+                            {currentRide.status === 'accepted'
+                              ? 'Guji si aad u ogeysiiso rakaabka (Tap to notify rider)'
+                              : currentRide.status === 'driver_arrived'
+                              ? 'Rakaabkii wuu fuulay (Passenger is onboard)'
+                              : `Qaado Lacagta • $${(Number(currentRide.totalFare) || 0).toFixed(2)} USD`}
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Tactile Slide-to-Confirm Option */}
+                      <SlideToAccept
+                        onAccept={() => {
+                          try {
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                              navigator.vibrate([40, 30, 40]);
+                            }
+                          } catch (_e) {}
+                          advanceDriverRideState();
+                          if (currentRide.status === 'accepted') {
+                            voiceNavigationService.speak('Arrived at pickup. Waiting for passenger.', 'en', true);
+                          } else if (currentRide.status === 'driver_arrived') {
+                            voiceNavigationService.speak('Trip started. Heading to destination.', 'en', true);
+                          } else if (currentRide.status === 'in_progress') {
+                            voiceNavigationService.speak('Trip completed. Please collect fare.', 'en', true);
+                          }
+                        }}
+                        label={
+                          currentRide.status === 'accepted'
+                            ? 'Ama u siq si aad u sheegto imaanshaha'
+                            : currentRide.status === 'driver_arrived'
+                            ? 'Ama u siq si aad u bilowdo safarka'
+                            : 'Ama u siq si aad u dhammeyso safarka'
                         }
-                      }}
-                      className="w-full py-3.5 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      <span>
-                        {currentRide.status === 'accepted'
-                          ? '📍 Gaadhay Goobta Kaqabashada (Arrived at Pickup)'
-                          : currentRide.status === 'driver_arrived'
-                          ? '🚗 Bilow Safarka (Start Trip)'
-                          : '✅ Dhammee Safarka & Qaado Lacagta (Complete Trip)'}
-                      </span>
-                    </button>
+                        completedLabel={
+                          currentRide.status === 'accepted'
+                            ? 'Waan Gaadhay • Arrived!'
+                            : currentRide.status === 'driver_arrived'
+                            ? 'Safarkii wuu bilaabmay!'
+                            : 'Safarkii waa la dhammeeyey!'
+                        }
+                      />
+                    </>
                   )}
                 </div>
               </div>
@@ -1267,7 +1350,8 @@ export const MobileDriverApp: React.FC = () => {
                         )}
                       </button>
                       <button
-                        onClick={initiateVoiceCall}
+                        type="button"
+                        onClick={() => setShowCallPassengerModal(true)}
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 transition"
                       >
                         <PhoneCall className="w-3.5 h-3.5" />
@@ -1446,7 +1530,8 @@ export const MobileDriverApp: React.FC = () => {
                         <span>Chat</span>
                       </button>
                       <button
-                        onClick={initiateVoiceCall}
+                        type="button"
+                        onClick={() => setShowCallPassengerModal(true)}
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 transition"
                       >
                         <PhoneCall className="w-3.5 h-3.5" />
@@ -1640,7 +1725,7 @@ export const MobileDriverApp: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-1.5">
                         <h4 className="font-extrabold text-sm text-slate-900">
-                          {currentRide.passengerName || 'Axmed Diiriye'}
+                          {currentRide.passengerName || 'Passenger'}
                         </h4>
                         <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9px] uppercase">
                           RIDER A (Primary)
@@ -1676,7 +1761,8 @@ export const MobileDriverApp: React.FC = () => {
                         )}
                       </button>
                       <button
-                        onClick={initiateVoiceCall}
+                        type="button"
+                        onClick={() => setShowCallPassengerModal(true)}
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition"
                       >
                         <PhoneCall className="w-3 h-3" />
@@ -1789,9 +1875,18 @@ export const MobileDriverApp: React.FC = () => {
                     return (
                       <button
                         type="button"
-                        onClick={advanceDriverRideState}
-                        className="w-full py-3.5 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-[#008751]/25 transition active:scale-95 flex items-center justify-center gap-2"
+                        id="driver-btn-drawer-ride-action"
+                        onClick={() => {
+                          try {
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                              navigator.vibrate([40, 30, 40]);
+                            }
+                          } catch (_e) {}
+                          advanceDriverRideState();
+                        }}
+                        className="w-full min-h-[58px] py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] active:bg-[#006038] text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-700/40 border-2 border-emerald-400/50 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none"
                       >
+                        <CheckCircle className="w-5 h-5 shrink-0" />
                         <span>{buttonLabel}</span>
                       </button>
                     );
@@ -2030,82 +2125,84 @@ export const MobileDriverApp: React.FC = () => {
       )}
 
       {/* 6. BOTTOM WADAAGE BLUE NAVIGATION BAR (Matching image.png) */}
-      <nav className="bg-[#0066f5] border-t border-blue-400/20 px-2 py-2 rounded-t-[1.8rem] shadow-2xl flex items-center justify-around shrink-0 text-white z-30 select-none">
-        {/* Tab 1: HOME */}
-        <button
-          id="nav-tab-home"
-          type="button"
-          onClick={() => setActiveTab('home')}
-          className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
-            activeTab === 'home'
-              ? 'bg-white text-[#0066f5] font-black shadow-md'
-              : 'text-white/80 hover:text-white font-bold'
-          }`}
-        >
-          <Home className="w-4 h-4 shrink-0" />
-          <span className="text-[11px] tracking-wider uppercase">HOME</span>
-        </button>
+      {(!currentRide || currentRide.status === 'searching' || currentRide.status === 'idle' || currentRide.status === 'cancelled' || currentRide.status === 'completed') && (
+        <nav className="bg-[#0066f5] border-t border-blue-400/20 px-2 py-2 rounded-t-[1.8rem] shadow-2xl flex items-center justify-around shrink-0 text-white z-30 select-none">
+          {/* Tab 1: HOME */}
+          <button
+            id="nav-tab-home"
+            type="button"
+            onClick={() => setActiveTab('home')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'home'
+                ? 'bg-white text-[#0066f5] font-black shadow-md'
+                : 'text-white/80 hover:text-white font-bold'
+            }`}
+          >
+            <Home className="w-4 h-4 shrink-0" />
+            <span className="text-[11px] tracking-wider uppercase">HOME</span>
+          </button>
 
-        {/* Tab 2: MY RIDES */}
-        <button
-          id="nav-tab-my-rides"
-          type="button"
-          onClick={() => setActiveTab('my_rides')}
-          className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
-            activeTab === 'my_rides'
-              ? 'bg-white text-[#0066f5] font-black shadow-md'
-              : 'text-white/80 hover:text-white font-bold'
-          }`}
-        >
-          <Car className="w-4 h-4 shrink-0" />
-          <span className="text-[11px] tracking-wider uppercase">MY RIDES</span>
-        </button>
+          {/* Tab 2: MY RIDES */}
+          <button
+            id="nav-tab-my-rides"
+            type="button"
+            onClick={() => setActiveTab('my_rides')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'my_rides'
+                ? 'bg-white text-[#0066f5] font-black shadow-md'
+                : 'text-white/80 hover:text-white font-bold'
+            }`}
+          >
+            <Car className="w-4 h-4 shrink-0" />
+            <span className="text-[11px] tracking-wider uppercase">MY RIDES</span>
+          </button>
 
-        {/* Tab 3: FUEL */}
-        <button
-          id="nav-tab-fuel"
-          type="button"
-          onClick={() => setActiveTab('fuel')}
-          className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 relative cursor-pointer ${
-            activeTab === 'fuel'
-              ? 'bg-white text-[#0066f5] font-black shadow-md'
-              : 'text-white/80 hover:text-white font-bold'
-          }`}
-        >
-          <FuelIcon className="w-4 h-4 shrink-0" />
-          <span className="text-[11px] tracking-wider uppercase">FUEL</span>
-        </button>
+          {/* Tab 3: FUEL */}
+          <button
+            id="nav-tab-fuel"
+            type="button"
+            onClick={() => setActiveTab('fuel')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 relative cursor-pointer ${
+              activeTab === 'fuel'
+                ? 'bg-white text-[#0066f5] font-black shadow-md'
+                : 'text-white/80 hover:text-white font-bold'
+            }`}
+          >
+            <FuelIcon className="w-4 h-4 shrink-0" />
+            <span className="text-[11px] tracking-wider uppercase">FUEL</span>
+          </button>
 
-        {/* Tab 4: EARNINGS */}
-        <button
-          id="nav-tab-earnings"
-          type="button"
-          onClick={() => setActiveTab('earnings')}
-          className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
-            activeTab === 'earnings'
-              ? 'bg-white text-[#0066f5] font-black shadow-md'
-              : 'text-white/80 hover:text-white font-bold'
-          }`}
-        >
-          <Wallet className="w-4 h-4 shrink-0" />
-          <span className="text-[11px] tracking-wider uppercase">EARNINGS</span>
-        </button>
+          {/* Tab 4: EARNINGS */}
+          <button
+            id="nav-tab-earnings"
+            type="button"
+            onClick={() => setActiveTab('earnings')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'earnings'
+                ? 'bg-white text-[#0066f5] font-black shadow-md'
+                : 'text-white/80 hover:text-white font-bold'
+            }`}
+          >
+            <Wallet className="w-4 h-4 shrink-0" />
+            <span className="text-[11px] tracking-wider uppercase">EARNINGS</span>
+          </button>
 
-        {/* Tab 5: PROFILE */}
-        <button
-          id="nav-tab-profile"
-          type="button"
-          onClick={() => setActiveTab('profile')}
-          className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
-            activeTab === 'profile'
-              ? 'bg-white text-[#0066f5] font-black shadow-md'
-              : 'text-white/80 hover:text-white font-bold'
-          }`}
-        >
-          <User className="w-4 h-4 shrink-0" />
-          <span className="text-[11px] tracking-wider uppercase">PROFILE</span>
-        </button>
-      </nav>
+          {/* Tab 5: PROFILE */}
+          <button
+            id="nav-tab-profile"
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'profile'
+                ? 'bg-white text-[#0066f5] font-black shadow-md'
+                : 'text-white/80 hover:text-white font-bold'
+            }`}
+          >
+            <User className="w-4 h-4 shrink-0" />
+            <span className="text-[11px] tracking-wider uppercase">PROFILE</span>
+          </button>
+        </nav>
+      )}
 
       {/* 7. DRIVER MENU DRAWER */}
       {showMenuDrawer && (
@@ -2322,9 +2419,9 @@ export const MobileDriverApp: React.FC = () => {
             </div>
             <div className="pt-3">
               <DriverAccountView
-                onOpenSupportModal={() => {}}
-                onOpenFatigueModal={() => {}}
-                onOpenVehicleModal={() => {}}
+                onOpenSupportModal={() => setShowSupportModal(true)}
+                onOpenFatigueModal={() => setShowFatigueModal(true)}
+                onOpenVehicleModal={() => setShowVehicleHealthModal(true)}
                 onOpenSosModal={() => setShowSosModal(true)}
               />
             </div>
@@ -2454,6 +2551,102 @@ export const MobileDriverApp: React.FC = () => {
           onClose={() => setShowVehicleSetupModal(false)}
         />
       )}
+
+      {/* Driver Support Tickets & Claims */}
+      <DriverSupportTickets
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+      />
+
+      {/* Driver Fatigue Alert & Break Modal */}
+      <DriverFatigueModal
+        isOpen={showFatigueModal}
+        hoursOnline={currentDriverRecord?.hoursOnline || 3.5}
+        onTakeBreak={() => {
+          setShowFatigueModal(false);
+          toggleDriverOnline(false);
+        }}
+        onClose={() => setShowFatigueModal(false)}
+      />
+
+      {/* Vehicle Diagnostics & Health Modal */}
+      <VehicleHealthModal
+        isOpen={showVehicleHealthModal}
+        onClose={() => setShowVehicleHealthModal(false)}
+      />
+
+      {/* Call Passenger Modal (Cellular GSM + In-App Voice HD) */}
+      {showCallPassengerModal && currentRide && (() => {
+        const passengerPhone = currentRide.passengerPhone || (currentRide as any).passenger_phone || '';
+        const cleanPhone = passengerPhone.replace(/[^0-9+]/g, '');
+        const waPhone = cleanPhone.replace(/^\+/, '');
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+            <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white">Wac Rakaabka</h3>
+                    <p className="text-[11px] text-slate-400">Call Passenger</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCallPassengerModal(false)}
+                  className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="text-center py-2 space-y-1">
+                <p className="text-base font-black text-white">{currentRide.passengerName || 'Passenger'}</p>
+                <p className="text-xs text-emerald-400 font-mono font-bold">{passengerPhone}</p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <a
+                  href={`tel:${cleanPhone}`}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center justify-center space-x-2 transition shadow-lg shadow-emerald-900/40"
+                  onClick={() => setShowCallPassengerModal(false)}
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>Wicitaan Toos Ah (Cellular Call)</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCallPassengerModal(false);
+                    initiateVoiceCall();
+                  }}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs flex items-center justify-center space-x-2 transition shadow-lg shadow-blue-900/40"
+                >
+                  <Radio className="w-4 h-4 animate-pulse" />
+                  <span>Wadaage HD Voice (Free In-App)</span>
+                </button>
+
+                {waPhone && (
+                  <a
+                    href={`https://wa.me/${waPhone}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center space-x-2 transition"
+                    onClick={() => setShowCallPassengerModal(false)}
+                  >
+                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                    <span>Fariin WhatsApp (Message)</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
