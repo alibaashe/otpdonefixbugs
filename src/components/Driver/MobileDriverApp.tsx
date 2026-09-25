@@ -58,7 +58,6 @@ import { VehicleSetupModal } from './Fuel/VehicleSetupModal';
 import { UnifiedMap } from '../Map/UnifiedMap';
 import { LocationPermissionPrompt } from '../Common/LocationPermissionPrompt';
 import { BottomSheet } from '../Common/BottomSheet';
-import { SlideToAccept } from './SlideToAccept';
 import { DriverCommissionWalletModal } from './DriverCommissionWalletModal';
 import { DriverEmergencySosModal } from './DriverEmergencySosModal';
 import { DriverEarningsView } from './DriverEarningsView';
@@ -828,8 +827,8 @@ export const MobileDriverApp: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Direct One-Tap Accept + Slide Option */}
-                      <div className="pt-1 space-y-2">
+                      {/* Direct Single-Touch Accept Button (No Sliding) */}
+                      <div className="pt-1">
                         <button
                           type="button"
                           onClick={() => {
@@ -840,16 +839,11 @@ export const MobileDriverApp: React.FC = () => {
                             } catch (_e) {}
                             acceptRideByDriver(currentUser?.id);
                           }}
-                          className="w-full py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none"
+                          className="w-full py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] active:bg-[#006038] text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none"
                         >
                           <Check className="w-5 h-5 stroke-[3]" />
                           <span>AQBAL DALABKA • ACCEPT ({requestTimer}s)</span>
                         </button>
-                        <SlideToAccept
-                          onAccept={() => acceptRideByDriver(currentUser?.id)}
-                          label="Ama u siq si aad u aqbasho"
-                          completedLabel="Dalabkii waa la aqbalay!"
-                        />
                       </div>
 
                       {/* Secondary Actions: DIID (Reject) & WAREEJI (Transfer) */}
@@ -1218,39 +1212,6 @@ export const MobileDriverApp: React.FC = () => {
                           </span>
                         </div>
                       </button>
-
-                      {/* Tactile Slide-to-Confirm Option */}
-                      <SlideToAccept
-                        onAccept={() => {
-                          try {
-                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                              navigator.vibrate([40, 30, 40]);
-                            }
-                          } catch (_e) {}
-                          advanceDriverRideState();
-                          if (currentRide.status === 'accepted') {
-                            voiceNavigationService.speak('Arrived at pickup. Waiting for passenger.', 'en', true);
-                          } else if (currentRide.status === 'driver_arrived') {
-                            voiceNavigationService.speak('Trip started. Heading to destination.', 'en', true);
-                          } else if (currentRide.status === 'in_progress') {
-                            voiceNavigationService.speak('Trip completed. Please collect fare.', 'en', true);
-                          }
-                        }}
-                        label={
-                          currentRide.status === 'accepted'
-                            ? 'Ama u siq si aad u sheegto imaanshaha'
-                            : currentRide.status === 'driver_arrived'
-                            ? 'Ama u siq si aad u bilowdo safarka'
-                            : 'Ama u siq si aad u dhammeyso safarka'
-                        }
-                        completedLabel={
-                          currentRide.status === 'accepted'
-                            ? 'Waan Gaadhay • Arrived!'
-                            : currentRide.status === 'driver_arrived'
-                            ? 'Safarkii wuu bilaabmay!'
-                            : 'Safarkii waa la dhammeeyey!'
-                        }
-                      />
                     </>
                   )}
                 </div>

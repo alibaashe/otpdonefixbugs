@@ -40,7 +40,9 @@ import {
   Calendar,
   Receipt,
   RotateCcw,
+  Wallet,
 } from 'lucide-react';
+import { WadaageRiderHeroHeader } from './WadaageRiderHeroHeader';
 import { useRide } from '../../context/RideContext';
 import { UnifiedMap } from '../Map/UnifiedMap';
 import { LocationPermissionPrompt } from '../Common/LocationPermissionPrompt';
@@ -90,9 +92,11 @@ export const MobilePassengerApp: React.FC = () => {
     allPlatformRides,
   } = useRide();
 
-  // Navigation Tabs: 'dalbo' (Home) | 'safarradayda' (Activity) | 'favorites' | 'akoonka' (Account)
-  type TabType = 'dalbo' | 'safarradayda' | 'favorites' | 'akoonka';
+  // Navigation Tabs: 'dalbo' (Home) | 'safarradayda' (My Rides) | 'wallet' (Wallet) | 'akoonka' (Account) | 'favorites'
+  type TabType = 'dalbo' | 'safarradayda' | 'wallet' | 'akoonka' | 'favorites';
   const [activeTab, setActiveTab] = useState<TabType>('dalbo');
+  const [selectedCapacity, setSelectedCapacity] = useState<number>(1);
+  const [capacityDropdownOpen, setCapacityDropdownOpen] = useState<boolean>(false);
 
   // Modals & Drawers
   const [showLocationSearchModal, setShowLocationSearchModal] = useState<'pickup' | 'dropoff' | null>(null);
@@ -129,6 +133,8 @@ export const MobilePassengerApp: React.FC = () => {
   const [showPromoInputModal, setShowPromoInputModal] = useState(false);
   const [orderTiming, setOrderTiming] = useState<'now' | 'advance'>('now');
   const [advanceMinutes, setAdvanceMinutes] = useState<number>(30);
+  const [isBooking, setIsBooking] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const distanceKm = roadDistanceKm || calculateDistanceKm(
     pickupLocation.lat,
@@ -300,11 +306,33 @@ export const MobilePassengerApp: React.FC = () => {
     return list;
   }, [filteredLocalPlaces, modalGoogleResults]);
 
-  const handleBookSelected = () => {
+  const handleBookSelected = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (isBooking) return;
+    setIsBooking(true);
     const scheduledTime = orderTiming === 'advance'
       ? new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : undefined;
     bookRide('cash', undefined, undefined, undefined, scheduledTime);
+    setTimeout(() => {
+      setIsBooking(false);
+    }, 1500);
+  };
+
+  const handleCancelSearch = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (isCancelling) return;
+    setIsCancelling(true);
+    cancelRide();
+    setTimeout(() => {
+      setIsCancelling(false);
+    }, 800);
   };
 
   return (
@@ -312,67 +340,42 @@ export const MobilePassengerApp: React.FC = () => {
       {/* 0. GPS Live Location Permission Prompt */}
       <LocationPermissionPrompt />
 
-      {/* 1. TOP APP BAR - Matching exact screenshot design */}
-      <header className="bg-white border-b border-slate-200/80 px-4 py-2.5 flex items-center justify-between shadow-2xs z-40 shrink-0 select-none">
-        {/* Left: Blue Hamburger in rounded circle */}
-        <button
-          onClick={() => setShowMenuDrawer(true)}
-          className="w-10 h-10 rounded-full border border-slate-200 bg-white flex items-center justify-center text-[#0066F5] shadow-xs hover:bg-slate-50 transition active:scale-95 cursor-pointer"
-          aria-label="Menu"
-        >
-          <Menu className="w-5 h-5 stroke-[2.5]" />
-        </button>
-
-        {/* Center: Wadaage Share Brand Logo */}
-        <div className="flex items-center justify-center">
-          <WadaageShareBrandLogo size="md" />
-        </div>
-
-        {/* Right: Somaliland Flag + Hargeisa Pill & Notification Bell */}
-        <div className="flex items-center space-x-2">
-          {/* Somaliland Flag Pill */}
-          <button
-            onClick={() => setShowCityModal(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-full text-xs font-bold text-[#0066F5] shadow-xs hover:bg-slate-50 transition active:scale-95 cursor-pointer"
-            title="Magaalada / City"
-          >
-            <SomalilandFlag className="w-4 h-2.5 rounded-xs shrink-0" />
-            <span>Hargeisa</span>
-            <ChevronDown className="w-3.5 h-3.5 text-[#0066F5]" />
-          </button>
-
-          {/* Notification Bell */}
-          <button
-            onClick={() => setShowNotificationsModal(true)}
-            className="relative w-10 h-10 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-800 shadow-xs hover:bg-slate-50 transition active:scale-95 cursor-pointer"
-            aria-label="Notifications"
-          >
-            <Bell className="w-4 h-4 text-slate-700" />
-            <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
-          </button>
-        </div>
-      </header>
+      {/* 1. TOP APP HERO BAR - Matching exact screenshot design */}
+      <WadaageRiderHeroHeader
+        onOpenMenu={() => setShowMenuDrawer(true)}
+        onOpenNotifications={() => setShowNotificationsModal(true)}
+      />
 
       {/* MAIN TAB CONTENT AREA */}
       <div className="flex-1 w-full h-full overflow-hidden relative flex flex-col">
         {/* TAB 1: DALBO (MAP & VEHICLE SELECTION) */}
         {activeTab === 'dalbo' && (
           <div className="w-full h-full flex-1 flex flex-col overflow-hidden relative">
-            {/* FLOATING ROUTE INPUT CARD OVER MAP (Matching screenshot exactly) */}
+            {/* FLOATING COMPACT ROUTE INPUT CARD OVER MAP (High Visibility Pick-Up & Drop-Off) */}
             {!currentRide && (
-              <div className="absolute top-3 inset-x-3.5 z-20 bg-white rounded-2xl border border-slate-200 shadow-lg p-3 select-none">
+              <div className="absolute top-2 inset-x-2.5 z-20 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200/90 shadow-lg p-2 select-none">
                 {/* Pickup Row */}
                 <div
                   onClick={() => setShowLocationSearchModal('pickup')}
-                  className="flex items-center justify-between cursor-pointer hover:bg-slate-50/80 -mx-1 px-1.5 py-1 rounded-xl transition"
+                  className="flex items-center justify-between cursor-pointer hover:bg-emerald-50/50 -mx-1 px-1.5 py-1 rounded-lg transition group"
                 >
-                  <div className="flex items-start space-x-2.5 min-w-0 flex-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 mt-1" />
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    {/* Glowing Emerald Pickup Indicator */}
+                    <div className="relative shrink-0 flex items-center justify-center">
+                      <span className="w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-emerald-200 flex items-center justify-center">
+                        <span className="w-1 h-1 rounded-full bg-white" />
+                      </span>
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-extrabold text-slate-900 tracking-tight leading-tight">
-                        Halka aad Joogto
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-1 py-0.5 rounded leading-none">
+                          PICK UP
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 truncate">
+                          {language === 'so' ? 'Halka lagaa qaadayo' : 'Current Location'}
+                        </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate font-medium">
+                      <div className="text-[11.5px] font-extrabold text-slate-900 truncate leading-tight mt-0.5">
                         {pickupLocation?.name || 'Ina Naxar Street, Hargeisa'}
                       </div>
                     </div>
@@ -386,70 +389,78 @@ export const MobilePassengerApp: React.FC = () => {
                       detectUserRealLocation();
                     }}
                     disabled={isDetectingLocation}
-                    className="shrink-0 ml-2 px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 text-[#0066F5] border border-blue-100 text-xs font-bold flex items-center space-x-1 shadow-2xs active:scale-95 transition cursor-pointer"
+                    className="shrink-0 ml-1.5 px-2 py-0.5 rounded-full bg-blue-50 hover:bg-blue-100 text-[#0066F5] border border-blue-200/80 text-[11px] font-bold flex items-center space-x-1 shadow-2xs active:scale-95 transition cursor-pointer"
                     title="Isticmaal GPS-ka tooska ah"
                   >
-                    <Navigation className={`w-3 h-3 text-[#0066F5] ${isDetectingLocation ? 'animate-spin' : ''}`} />
+                    <Navigation className={`w-2.5 h-2.5 text-[#0066F5] ${isDetectingLocation ? 'animate-spin' : ''}`} />
                     <span>Goobtaada</span>
                   </button>
                 </div>
 
-                {/* Dotted vertical line separator */}
-                <div className="flex items-center space-x-1 pl-1 py-0.5">
-                  <div className="flex flex-col items-center space-y-0.5 ml-[1px]">
-                    <span className="w-1 h-1 rounded-full bg-slate-300" />
-                    <span className="w-1 h-1 rounded-full bg-slate-300" />
-                    <span className="w-1 h-1 rounded-full bg-slate-300" />
+                {/* Connecting Dotted Route Separator */}
+                <div className="flex items-center pl-3 py-0.5">
+                  <div className="flex flex-col items-center space-y-0.5">
+                    <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                    <span className="w-1 h-1 rounded-full bg-rose-400" />
                   </div>
                 </div>
 
                 {/* Dropoff Row */}
                 <div
                   onClick={() => setShowLocationSearchModal('dropoff')}
-                  className="flex items-center justify-between cursor-pointer hover:bg-slate-50/80 -mx-1 px-1.5 py-1 rounded-xl transition"
+                  className="flex items-center justify-between cursor-pointer hover:bg-rose-50/50 -mx-1 px-1.5 py-1 rounded-lg transition group"
                 >
-                  <div className="flex items-start space-x-2.5 min-w-0 flex-1">
-                    <MapPin className="w-3.5 h-3.5 text-rose-500 fill-rose-500 shrink-0 mt-0.5" />
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    {/* Glowing Red Dropoff Pin Indicator */}
+                    <div className="relative shrink-0 flex items-center justify-center">
+                      <MapPin className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-extrabold text-slate-900 tracking-tight leading-tight">
-                        Halka aad Tageyso
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-rose-800 bg-rose-100 px-1 py-0.5 rounded leading-none">
+                          DROP OFF
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 truncate">
+                          {language === 'so' ? 'Halka aad tageyso' : 'Destination'}
+                        </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate font-medium">
+                      <div className="text-[11.5px] font-extrabold text-slate-900 truncate leading-tight mt-0.5">
                         {dropoffLocation?.name || 'Berbera Bus Terminal (Istaanka Berbera)'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Clear button ✕ */}
+                  {/* Beddel (Change) button */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowLocationSearchModal('dropoff');
                     }}
-                    className="shrink-0 ml-2 w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition active:scale-90 cursor-pointer"
+                    className="shrink-0 ml-1.5 px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center space-x-1 transition active:scale-90 cursor-pointer border border-slate-200"
                     title="Beddel meesha"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <span>Beddel</span>
+                    <X className="w-2.5 h-2.5 text-slate-400" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* FULL BLEED MAP AREA */}
+            {/* FULL BLEED MAP AREA - Maximum screen space */}
             <div className="relative flex-1 w-full h-full overflow-hidden">
               <UnifiedMap height="100%" />
 
-              {/* Floating GPS Button on right */}
-              <div className="absolute top-36 right-3 z-20 flex flex-col space-y-2 select-none">
+              {/* Floating GPS Button on right - positioned neatly */}
+              <div className="absolute top-28 right-2.5 z-20 flex flex-col space-y-2 select-none">
                 <button
                   type="button"
                   onClick={() => detectUserRealLocation()}
                   disabled={isDetectingLocation}
-                  className="w-10 h-10 rounded-full bg-white/95 backdrop-blur-sm border border-slate-200 shadow-md flex items-center justify-center text-[#0066F5] hover:bg-white active:scale-95 transition cursor-pointer"
+                  className="w-9 h-9 rounded-full bg-white/95 backdrop-blur-sm border border-slate-200 shadow-md flex items-center justify-center text-[#0066F5] hover:bg-white active:scale-95 transition cursor-pointer"
                   title="Goobteyda GPS"
                 >
-                  <Crosshair className={`w-5 h-5 ${isDetectingLocation ? 'animate-spin text-amber-500' : ''}`} />
+                  <Crosshair className={`w-4 h-4 ${isDetectingLocation ? 'animate-spin text-amber-500' : ''}`} />
                 </button>
               </div>
 
@@ -513,69 +524,118 @@ export const MobilePassengerApp: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={cancelRide}
-                  className="w-full py-2.5 bg-slate-100 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-rose-600 font-bold rounded-xl text-xs transition active:scale-95"
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={handleCancelSearch}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-rose-600 font-bold rounded-xl text-xs transition active:scale-95 cursor-pointer touch-manipulation flex items-center justify-center space-x-1.5"
                 >
-                  {t.cancelSearch}
+                  {isCancelling ? (
+                    <span>{language === 'so' ? 'Waa la baajinayaa...' : 'Cancelling...'}</span>
+                  ) : (
+                    <span>{t.cancelSearch}</span>
+                  )}
                 </button>
               </div>
             )}
 
-            {/* BOTTOM VEHICLE SELECTION SHEET (Matching image.png) */}
+            {/* BOTTOM VEHICLE SELECTION SHEET - Compact design for maximum map area */}
             {!currentRide && (
-              <div className="absolute bottom-0 inset-x-0 z-20 bg-white rounded-t-3xl shadow-2xl border-t border-slate-200/80 px-4 pt-2.5 pb-4 select-none">
+              <div className="absolute bottom-0 inset-x-0 z-20 bg-white rounded-t-2xl shadow-2xl border-t border-slate-200/80 px-3 pt-2 pb-3 select-none">
                 {/* Drag handle */}
-                <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-3" />
+                <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-2" />
 
-                {/* 2 Side-by-side vehicle cards */}
-                <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* 2 Side-by-side compact vehicle cards */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
                   {/* Card 1: Wadaage */}
                   <div
                     onClick={() => setSelectedCategory('wadaage_share')}
-                    className={`relative rounded-2xl p-3 flex flex-col justify-between transition cursor-pointer ${
+                    className={`relative rounded-xl p-2 flex flex-col justify-between transition cursor-pointer ${
                       selectedCategory === 'wadaage_share'
-                        ? 'border-2 border-emerald-500 bg-white shadow-md ring-2 ring-emerald-500/20'
+                        ? 'border-2 border-emerald-500 bg-white shadow-sm ring-2 ring-emerald-500/20'
                         : 'border border-slate-200 bg-white hover:border-slate-300 shadow-2xs'
                     }`}
                   >
                     {/* Top right checkmark badge */}
-                    <div className="absolute top-2.5 right-2.5">
+                    <div className="absolute top-2 right-2">
                       {selectedCategory === 'wadaage_share' ? (
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+                          <Check className="w-3 h-3 stroke-[3]" />
                         </div>
                       ) : (
-                        <div className="w-5 h-5 rounded-full border border-slate-300 bg-white" />
+                        <div className="w-4 h-4 rounded-full border border-slate-300 bg-white" />
                       )}
                     </div>
 
-                    {/* Vector Car graphic */}
-                    <div className="w-full flex justify-center py-1">
-                      <WadaageCarCardGraphic type="wadaage" className="w-28 h-14 object-contain drop-shadow-xs" />
+                    {/* Vector / Photo Car graphic */}
+                    <div className="w-full h-10 flex items-center justify-center overflow-hidden">
+                      <img
+                        src="/images/car_wadaage_share.jpg"
+                        alt="Wadaage Share"
+                        className="w-full h-full object-contain drop-shadow-xs"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <WadaageCarCardGraphic type="wadaage" className="w-24 h-10 object-contain drop-shadow-xs hidden only:block" />
                     </div>
 
                     {/* Title & Slogan */}
-                    <div>
-                      <div className="font-black text-slate-900 text-sm tracking-tight">Wadaage</div>
-                      <div className="text-[11px] text-slate-500 font-medium leading-tight line-clamp-1">
-                        "Safar wadaag, nolol wadaag."
+                    <div className="mt-0.5">
+                      <div className="font-black text-slate-900 text-xs tracking-tight">Wadaage</div>
+                      <div className="text-[9.5px] text-slate-400 font-medium leading-tight truncate">
+                        Safar wadaag, nolol wadaag
                       </div>
                     </div>
 
                     {/* Price */}
-                    <div className="mt-2 text-base font-black text-slate-900 tracking-tight">
+                    <div className="mt-1 text-sm font-black text-slate-900 tracking-tight">
                       {wadaageFareFormatted}
                     </div>
 
-                    {/* Meta */}
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500 font-bold border-t border-slate-100 pt-1.5">
-                      <span className="flex items-center space-x-1">
-                        <Users className="w-3 h-3 text-slate-400" />
-                        <span>1–4 kursi</span>
-                      </span>
-                      <span className="flex items-center space-x-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
-                        <span>~ 10 daqiiqo</span>
+                    {/* Meta & Seats Selector */}
+                    <div className="mt-1 flex items-center justify-between text-[9px] text-slate-500 font-bold border-t border-slate-100 pt-1 relative">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCapacityDropdownOpen(!capacityDropdownOpen);
+                          }}
+                          className="flex items-center space-x-1 hover:text-emerald-700 bg-slate-50 hover:bg-slate-100 px-1 py-0.5 rounded border border-slate-200 transition cursor-pointer"
+                        >
+                          <Users className="w-2.5 h-2.5 text-slate-400" />
+                          <span>{selectedCapacity} kursi</span>
+                          <ChevronDown className="w-2 h-2 ml-0.5 text-slate-400" />
+                        </button>
+
+                        {capacityDropdownOpen && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute bottom-full left-0 mb-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl p-1 flex space-x-1 animate-fadeIn"
+                          >
+                            {[1, 2, 3, 4].map((num) => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCapacity(num);
+                                  setCapacityDropdownOpen(false);
+                                }}
+                                className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center transition cursor-pointer ${
+                                  selectedCapacity === num
+                                    ? 'bg-[#008751] text-white shadow-xs'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {num}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <span className="flex items-center space-x-0.5">
+                        <Clock className="w-2.5 h-2.5 text-slate-400" />
+                        <span>~10 daq</span>
                       </span>
                     </div>
                   </div>
@@ -583,50 +643,58 @@ export const MobilePassengerApp: React.FC = () => {
                   {/* Card 2: Normal Taxi */}
                   <div
                     onClick={() => setSelectedCategory('wadaage_taxi')}
-                    className={`relative rounded-2xl p-3 flex flex-col justify-between transition cursor-pointer ${
+                    className={`relative rounded-xl p-2 flex flex-col justify-between transition cursor-pointer ${
                       selectedCategory === 'wadaage_taxi'
-                        ? 'border-2 border-emerald-500 bg-white shadow-md ring-2 ring-emerald-500/20'
+                        ? 'border-2 border-emerald-500 bg-white shadow-sm ring-2 ring-emerald-500/20'
                         : 'border border-slate-200 bg-white hover:border-slate-300 shadow-2xs'
                     }`}
                   >
                     {/* Top right indicator */}
-                    <div className="absolute top-2.5 right-2.5">
+                    <div className="absolute top-2 right-2">
                       {selectedCategory === 'wadaage_taxi' ? (
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+                          <Check className="w-3 h-3 stroke-[3]" />
                         </div>
                       ) : (
-                        <div className="w-5 h-5 rounded-full border border-slate-300 bg-white" />
+                        <div className="w-4 h-4 rounded-full border border-slate-300 bg-white" />
                       )}
                     </div>
 
-                    {/* Vector Car graphic */}
-                    <div className="w-full flex justify-center py-1">
-                      <WadaageCarCardGraphic type="taxi" className="w-28 h-14 object-contain drop-shadow-xs" />
+                    {/* Vector / Photo Car graphic */}
+                    <div className="w-full h-10 flex items-center justify-center overflow-hidden">
+                      <img
+                        src="/images/car_taaksi_gaara.jpg"
+                        alt="Normal Taxi"
+                        className="w-full h-full object-contain drop-shadow-xs"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <WadaageCarCardGraphic type="taxi" className="w-24 h-10 object-contain drop-shadow-xs hidden only:block" />
                     </div>
 
                     {/* Title & Slogan */}
-                    <div>
-                      <div className="font-black text-slate-900 text-sm tracking-tight">Normal Taxi</div>
-                      <div className="text-[11px] text-slate-500 font-medium leading-tight line-clamp-1">
-                        "Gaari kuu gaar ah"
+                    <div className="mt-0.5">
+                      <div className="font-black text-slate-900 text-xs tracking-tight">Normal Taxi</div>
+                      <div className="text-[9.5px] text-slate-400 font-medium leading-tight truncate">
+                        Gaari kuu gaar ah
                       </div>
                     </div>
 
                     {/* Price */}
-                    <div className="mt-2 text-base font-black text-slate-900 tracking-tight">
+                    <div className="mt-1 text-sm font-black text-slate-900 tracking-tight">
                       {taxiFareFormatted}
                     </div>
 
                     {/* Meta */}
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500 font-bold border-t border-slate-100 pt-1.5">
-                      <span className="flex items-center space-x-1">
-                        <Users className="w-3 h-3 text-slate-400" />
+                    <div className="mt-1 flex items-center justify-between text-[9px] text-slate-500 font-bold border-t border-slate-100 pt-1">
+                      <span className="flex items-center space-x-0.5">
+                        <Users className="w-2.5 h-2.5 text-slate-400" />
                         <span>1–4 kursi</span>
                       </span>
-                      <span className="flex items-center space-x-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
-                        <span>~ 10 daqiiqo</span>
+                      <span className="flex items-center space-x-0.5">
+                        <Clock className="w-2.5 h-2.5 text-slate-400" />
+                        <span>~10 daq</span>
                       </span>
                     </div>
                   </div>
@@ -634,23 +702,34 @@ export const MobilePassengerApp: React.FC = () => {
 
                 {/* Big Green CTA Button: Dalbo Hada → */}
                 <button
+                  type="button"
+                  disabled={isBooking}
                   onClick={handleBookSelected}
-                  className="w-full py-3.5 px-6 rounded-2xl bg-[#008751] hover:bg-[#007345] active:scale-[0.98] text-white font-black text-base tracking-wide shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#008751] hover:bg-[#007345] active:bg-[#006038] active:scale-[0.98] text-white font-black text-sm tracking-wide shadow-md flex items-center justify-center space-x-2 transition cursor-pointer touch-manipulation select-none"
                 >
-                  <span>
-                    {orderTiming === 'advance'
-                      ? (language === 'so'
-                          ? `Xaqiiji Dalabka Hore (${new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
-                          : `Confirm Advance Order (${new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`)
-                      : (language === 'so'
-                          ? `Dalbo ${selectedCategory === 'wadaage_share' ? 'Wadaage' : 'Taksi'}`
-                          : `Book ${selectedCategory === 'wadaage_share' ? 'Wadaage' : 'Taxi'}`)}
-                  </span>
-                  <div className="text-right">
-                    <span className="bg-white/20 px-3 py-1 rounded-lg text-xs font-black block">
-                      {Math.round(currentFare.finalFare * EXCHANGE_RATE_USD_TO_SLSH).toLocaleString()} SLSH (${currentFare.finalFare.toFixed(2)})
+                  {isBooking ? (
+                    <span className="flex items-center space-x-2">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>{language === 'so' ? 'Waa la dalbayaa...' : 'Booking...'}</span>
                     </span>
-                  </div>
+                  ) : (
+                    <>
+                      <span>
+                        {orderTiming === 'advance'
+                          ? (language === 'so'
+                              ? `Xaqiiji Dalabka Hore (${new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
+                              : `Confirm Advance Order (${new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`)
+                          : (language === 'so'
+                              ? `Dalbo ${selectedCategory === 'wadaage_share' ? 'Wadaage' : 'Taksi'}`
+                              : `Book ${selectedCategory === 'wadaage_share' ? 'Wadaage' : 'Taxi'}`)}
+                      </span>
+                      <div className="text-right ml-2">
+                        <span className="bg-white/20 px-2 py-0.5 rounded text-[11px] font-black block">
+                          {Math.round(currentFare.finalFare * EXCHANGE_RATE_USD_TO_SLSH).toLocaleString()} SLSH (${currentFare.finalFare.toFixed(2)})
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -911,6 +990,92 @@ export const MobilePassengerApp: React.FC = () => {
           </div>
         )}
 
+        {/* TAB: WALLET (JEEBKA & LACAG-BIXINTA) */}
+        {activeTab === 'wallet' && (
+          <div className="w-full h-full flex-1 overflow-y-auto bg-slate-50 p-4 space-y-4">
+            <div>
+              <h2 className="text-base font-black text-slate-900 flex items-center space-x-2">
+                <Wallet className="w-5 h-5 text-[#008751]" />
+                <span>{language === 'so' ? 'Jeebka & Lacag-bixinta' : 'Wallet & Payments'}</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                {language === 'so' ? 'Bixi lacagta caddaanka ah (SLSH) ama ku bixi Zaad/eDahab toos ah' : 'Cash payments (SLSH) and local mobile money services'}
+              </p>
+            </div>
+
+            {/* Cash Payment Mode Card */}
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-800 rounded-2xl p-4 text-white shadow-md relative overflow-hidden">
+              <div className="relative z-10 space-y-2">
+                <div className="inline-flex items-center space-x-1.5 bg-white/20 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                  <span>💵 Cadaan / Cash</span>
+                </div>
+                <div className="text-2xl font-black">100% Lacag Cadaan ah</div>
+                <p className="text-xs text-emerald-100 leading-relaxed">
+                  Safarkaaga waxaad ku bixinaysaa lacag cadaan ah (Shilin Soomaaliland ama Dollar) marka uu darwalku ku geeyo goobtaada.
+                </p>
+              </div>
+            </div>
+
+            {/* Mobile Money Quick Dialers */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                {language === 'so' ? 'Lacag-bixinta Mobile Money' : 'Mobile Money Direct Transfer'}
+              </h3>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2.5">
+                  <div className="font-black text-[#008751] text-sm">ZAAD</div>
+                  <div className="text-[11px] font-bold text-slate-600 mt-0.5">*880#</div>
+                  <div className="text-[9px] text-slate-400 mt-1">Telesom</div>
+                </div>
+                <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-2.5">
+                  <div className="font-black text-blue-700 text-sm">eDahab</div>
+                  <div className="text-[11px] font-bold text-slate-600 mt-0.5">*111#</div>
+                  <div className="text-[9px] text-slate-400 mt-1">Somtel</div>
+                </div>
+                <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-2.5">
+                  <div className="font-black text-amber-700 text-sm">Sahal</div>
+                  <div className="text-[11px] font-bold text-slate-600 mt-0.5">*712#</div>
+                  <div className="text-[9px] text-slate-400 mt-1">Golis</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Promo & Discounts */}
+            <div
+              onClick={() => setShowPromosModal(true)}
+              className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between cursor-pointer hover:border-emerald-300 transition"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#008751] flex items-center justify-center">
+                  <Tag className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs text-slate-900">Koodhadhka Qiimo-dhimista (Promos)</div>
+                  <div className="text-[11px] text-slate-500">Geli koodh si aad u hesho qiimo dhimis safarka ah</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            </div>
+
+            {/* Past Payment Receipts */}
+            <div
+              onClick={() => setShowHistoryModal(true)}
+              className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between cursor-pointer hover:border-emerald-300 transition"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-extrabold text-xs text-slate-900">Rasiidhada Safarrada (Receipts)</div>
+                  <div className="text-[11px] text-slate-500">Dhammaan rasiidhadaha safarradii aad hore u gashay</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+        )}
+
         {/* TAB 4: AKOONKA (ACCOUNT & PROFILE) */}
         {activeTab === 'akoonka' && (
           <div className="w-full h-full flex-1 overflow-y-auto bg-slate-50 p-4 space-y-4">
@@ -1021,72 +1186,72 @@ export const MobilePassengerApp: React.FC = () => {
 
       {/* NATIVE MOBILE BOTTOM TAB BAR (Matching screenshot 4 tabs exactly) */}
       <nav className="relative z-40 bg-white border-t border-slate-200/90 px-3 py-2 flex items-center justify-around shadow-lg shrink-0 select-none">
-        {/* Tab 1: Dalbo */}
+        {/* Tab 1: Home */}
         <button
           type="button"
           onClick={() => setActiveTab('dalbo')}
           className={`flex-1 min-h-[48px] py-1 px-2 flex flex-col items-center justify-center space-y-1 rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
             activeTab === 'dalbo'
-              ? 'text-emerald-700 font-extrabold'
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008751] font-extrabold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <div className="relative">
-            <Car className={`w-5 h-5 ${activeTab === 'dalbo' ? 'text-[#008751] stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
+            <Home className={`w-5 h-5 ${activeTab === 'dalbo' ? 'text-[#008751] stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
             {currentRide && (
               <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
             )}
           </div>
-          <span className={`text-[11px] tracking-tight ${activeTab === 'dalbo' ? 'text-[#008751] font-black' : 'text-slate-500'}`}>
-            Dalbo
+          <span className={`text-[11px] tracking-tight ${activeTab === 'dalbo' ? 'text-[#008751] font-black' : 'text-slate-400'}`}>
+            Home
           </span>
         </button>
 
-        {/* Tab 2: Safarradayda */}
+        {/* Tab 2: My Rides */}
         <button
           type="button"
           onClick={() => setActiveTab('safarradayda')}
           className={`flex-1 min-h-[48px] py-1 px-2 flex flex-col items-center justify-center space-y-1 rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
             activeTab === 'safarradayda'
-              ? 'text-emerald-700 font-extrabold'
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008751] font-extrabold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
-          <Calendar className={`w-5 h-5 ${activeTab === 'safarradayda' ? 'text-[#008751] stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
-          <span className={`text-[11px] tracking-tight ${activeTab === 'safarradayda' ? 'text-[#008751] font-black' : 'text-slate-500'}`}>
-            Safarradayda
+          <Clock className={`w-5 h-5 ${activeTab === 'safarradayda' ? 'text-[#008751] stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
+          <span className={`text-[11px] tracking-tight ${activeTab === 'safarradayda' ? 'text-[#008751] font-black' : 'text-slate-400'}`}>
+            My Rides
           </span>
         </button>
 
-        {/* Tab 3: Favorites */}
+        {/* Tab 3: Wallet */}
         <button
           type="button"
-          onClick={() => setActiveTab('favorites')}
+          onClick={() => setActiveTab('wallet')}
           className={`flex-1 min-h-[48px] py-1 px-2 flex flex-col items-center justify-center space-y-1 rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
-            activeTab === 'favorites'
-              ? 'text-emerald-700 font-extrabold'
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+            activeTab === 'wallet'
+              ? 'text-[#008751] font-extrabold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
-          <Heart className={`w-5 h-5 ${activeTab === 'favorites' ? 'text-[#008751] fill-emerald-600 stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
-          <span className={`text-[11px] tracking-tight ${activeTab === 'favorites' ? 'text-[#008751] font-black' : 'text-slate-500'}`}>
-            Favorites
+          <Wallet className={`w-5 h-5 ${activeTab === 'wallet' ? 'text-[#008751] stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
+          <span className={`text-[11px] tracking-tight ${activeTab === 'wallet' ? 'text-[#008751] font-black' : 'text-slate-400'}`}>
+            Wallet
           </span>
         </button>
 
-        {/* Tab 4: Akoonka */}
+        {/* Tab 4: Account */}
         <button
           type="button"
           onClick={() => setActiveTab('akoonka')}
           className={`flex-1 min-h-[48px] py-1 px-2 flex flex-col items-center justify-center space-y-1 rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
             activeTab === 'akoonka'
-              ? 'text-emerald-700 font-extrabold'
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008751] font-extrabold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <User className={`w-5 h-5 ${activeTab === 'akoonka' ? 'text-[#008751] stroke-[2.5px]' : 'text-slate-400 stroke-2'}`} />
-          <span className={`text-[11px] tracking-tight ${activeTab === 'akoonka' ? 'text-[#008751] font-black' : 'text-slate-500'}`}>
-            Akoonka
+          <span className={`text-[11px] tracking-tight ${activeTab === 'akoonka' ? 'text-[#008751] font-black' : 'text-slate-400'}`}>
+            Account
           </span>
         </button>
       </nav>

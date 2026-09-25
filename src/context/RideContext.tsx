@@ -354,6 +354,8 @@ const RideContext = createContext<RideContextType | undefined>(undefined);
 export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isBookingRideRef = useRef<boolean>(false);
   const isActionPendingRef = useRef<boolean>(false);
+  const cancelledRideIdsRef = useRef<Set<string>>(new Set<string>());
+  const dismissedRideIdsRef = useRef<Set<string>>(new Set<string>());
   const chargedRideIdsRef = useRef<Set<string>>(
     (() => {
       try {
@@ -574,19 +576,19 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [driverLiveGpsEnabled, setDriverLiveGpsEnabled] = useState<boolean>(true);
   const [driverModeOnline, setDriverModeOnline] = useState<boolean>(true);
 
-  const defaultPickup: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('waqooyigalbeed') || p.id.includes('waqooyi')) || {
-    id: 'waqooyigalbeed_hargeisa',
-    name: 'Waqooyigalbeed, Hargeisa',
-    address: 'Waqooyigalbeed District, Hargeisa',
-    lat: 9.5780,
-    lng: 44.0350,
+  const defaultPickup: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('ina naxar') || p.id.includes('naxar')) || {
+    id: 'ina_naxar_street',
+    name: 'Ina Naxar Street, Hargeisa',
+    address: 'Ina Naxar Street, 26 June District, Hargeisa',
+    lat: 9.5320,
+    lng: 44.0710,
   };
-  const defaultDropoff: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('suuqa hoose') || p.id.includes('suuqa_hoose')) || {
-    id: 'suuqa_hoose_hargeisa',
-    name: 'Suuqa Hoose, Hargeisa',
-    address: 'Suuqa Hoose, Downtown Waheen, Hargeisa',
-    lat: 9.5620,
-    lng: 44.0680,
+  const defaultDropoff: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('berbera') || p.id.includes('berbera')) || {
+    id: 'berbera_bus_terminal',
+    name: 'Berbera Bus Terminal (Istaanka Berbera)',
+    address: 'East Highway, 26 June District, Hargeisa',
+    lat: 9.5680,
+    lng: 44.0850,
   };
 
   const [pickupLocation, setPickupLocation] = useState<LocationNode>(defaultPickup);
@@ -1842,6 +1844,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const myActiveRide = sortedRides.find(
             (r) =>
               isMyPassengerRide(r) &&
+              !cancelledRideIdsRef.current.has(r.id) &&
+              !dismissedRideIdsRef.current.has(r.id) &&
               (r.status === 'searching' ||
                 r.status === 'accepted' ||
                 r.status === 'driver_arrived' ||
@@ -1869,7 +1873,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
               return current;
             });
-          } else if (currentRide) {
+          } else if (currentRide && !cancelledRideIdsRef.current.has(currentRide.id) && !dismissedRideIdsRef.current.has(currentRide.id)) {
             const updatedMatching = sortedRides.find((r) => r.id === currentRide.id);
             if (updatedMatching && updatedMatching.status !== currentRide.status) {
               if (currentRide.status === 'searching' && updatedMatching.status === 'accepted') {
@@ -2232,6 +2236,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         if (role === 'passenger' && isMyPassengerRide(payload)) {
+          if (cancelledRideIdsRef.current.has(payload.id) || dismissedRideIdsRef.current.has(payload.id)) {
+            return;
+          }
           setCurrentRide(updateRideWithRank);
           if (payload.status === 'driver_arrived') {
             sounds.playIncomingPing();
@@ -2253,13 +2260,27 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else if (type === 'RIDE_CANCELLED') {
         if (payload?.id) {
+          cancelledRideIdsRef.current.add(payload.id);
           setAllPlatformRides((prev) => prev.map((r) => (r.id === payload.id ? { ...r, ...payload, status: 'cancelled' } : r)));
         }
-        if (currentRide?.id === payload.id) {
-          setCurrentRide({ ...payload, status: 'cancelled' });
-          setTimeout(() => setCurrentRide(null), 1200);
+        if (currentRide?.id === payload?.id) {
+          setCurrentRide(null);
+          try {
+            localStorage.removeItem('wadaage_current_ride');
+          } catch {}
         }
-        setIncomingDriverRequest((prev) => (prev?.id === payload.id ? null : prev));
+        setIncomingDriverRequest((prev) => (prev?.id === payload?.id ? null : prev));
+      } else if (type === 'RIDE_RATING_SUBMITTED') {
+        const rId = payload?.rideId || payload?.id;
+        if (rId) {
+          dismissedRideIdsRef.current.add(rId);
+        }
+        if (currentRide?.id === rId) {
+          setCurrentRide(null);
+          try {
+            localStorage.removeItem('wadaage_current_ride');
+          } catch {}
+        }
       } else if (type === 'CHAT_MESSAGE') {
         if (payload && payload.message) {
           const incomingMsg: ChatMessage = payload.message;
@@ -3532,20 +3553,27 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Cancel Ride
+  // Cancel Ride - Instant clean reset with idempotency guard
   const cancelRide = () => {
     if (currentRide) {
-      const cancelledRide: RideRequest = { ...currentRide, status: 'cancelled' };
-      setCurrentRide(cancelledRide);
+      const rideId = currentRide.id;
+      cancelledRideIdsRef.current.add(rideId);
+      const cancelledRide: RideRequest = {
+        ...currentRide,
+        status: 'cancelled',
+        cancellationReason: 'Cancelled by passenger',
+      };
+
+      // Reset state immediately so rider returns to home view instantly
+      setCurrentRide(null);
       setIncomingDriverRequest(null);
+      try {
+        localStorage.removeItem('wadaage_current_ride');
+      } catch (_e) {}
 
       saveRideToFirestore(cancelledRide);
       syncRideToHostinger(cancelledRide);
       broadcastRideEvent('RIDE_CANCELLED', cancelledRide);
-
-      setTimeout(() => {
-        setCurrentRide(null);
-      }, 1200);
     }
   };
 
@@ -4534,7 +4562,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const performAdvanceDriverRideState = () => {
     if (!currentRide) return;
 
-    // 1. Direct status transition if in 'accepted' state -> driver has arrived at pickup
+    // 1. Step 1: accepted -> driver_arrived ("📍 WAAN GAADHAY • I HAVE ARRIVED")
     if (currentRide.status === 'accepted') {
       sounds.playIncomingPing();
       const updatedWaypoints = currentRide.optimalWaypointsSequence
@@ -4546,6 +4574,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const arrivedRide: RideRequest = {
         ...currentRide,
         status: 'driver_arrived',
+        arrivedAt: new Date().toLocaleTimeString(),
         optimalWaypointsSequence: updatedWaypoints || currentRide.optimalWaypointsSequence,
       };
       setCurrentRide(arrivedRide);
@@ -4555,168 +4584,98 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Check if we have active multi-passenger waypoints in sequence
-    const waypoints = currentRide.optimalWaypointsSequence;
-    if (waypoints && waypoints.length > 0) {
-      const nextPendingIndex = waypoints.findIndex((w) => w.status === 'pending');
+    // 2. Step 2: driver_arrived -> in_progress ("🚗 BILOW SAFARKA • START TRIP")
+    if (currentRide.status === 'driver_arrived') {
+      sounds.playAcceptedChime();
+      handleRideStartCommissionDeduction(currentRide);
 
-      if (nextPendingIndex !== -1) {
-        const activeWaypoint = waypoints[nextPendingIndex];
+      const updatedWaypoints = currentRide.optimalWaypointsSequence
+        ? currentRide.optimalWaypointsSequence.map((w) =>
+            w.type === 'PICKUP' ? { ...w, status: 'completed' as const } : w
+          )
+        : undefined;
 
-        const updatedWaypoints = waypoints.map((w, idx) =>
-          idx === nextPendingIndex ? { ...w, status: 'completed' as const } : w
-        );
-
-        // Check if there are any remaining pending waypoints
-        const remainingPending = updatedWaypoints.some((w) => w.status === 'pending');
-
-        if (activeWaypoint.type === 'PICKUP') {
-          sounds.playAcceptedChime();
-          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-            try {
-              const u = new SpeechSynthesisUtterance(`${activeWaypoint.passengerName} is now onboard.`);
-              window.speechSynthesis.speak(u);
-            } catch {}
-          }
-        } else {
-          sounds.playIncomingPing();
-          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-            try {
-              const u = new SpeechSynthesisUtterance(`Dropoff completed for ${activeWaypoint.passengerName}.`);
-              window.speechSynthesis.speak(u);
-            } catch {}
-          }
-
-          // If this dropoff belongs to a stacked Co-Passenger (Rider B), update Rider B's record in Firestore/Relay
-          if (
-            currentRide.coPassenger &&
-            (activeWaypoint.passengerId === currentRide.coPassenger.id || activeWaypoint.passengerName === (currentRide.coPassenger.name || 'Co-Passenger'))
-          ) {
-            const coRiderCompletion: RideRequest = {
-              id: currentRide.coPassenger.id || `co_${Date.now()}`,
-              passengerId: currentRide.coPassenger.id || `co_${Date.now()}`,
-              passengerName: currentRide.coPassenger.name || 'Co-Passenger',
-              passengerPhone: '+252 63 0000000',
-              passengerAvatar: currentRide.coPassenger.avatar,
-              pickup: currentRide.coPassenger.pickupLocation || { id: 'co_pick_2', name: 'Pickup', address: 'Hargeisa', lat: 9.56, lng: 44.06 },
-              dropoff: currentRide.coPassenger.dropoffLocation || { id: 'co_drop_2', name: 'Dropoff', address: 'Hargeisa', lat: 9.57, lng: 44.07 },
-              category: 'wadaage_share',
-              categoryName: 'Wadaage Share',
-              baseFare: 0.50,
-              distanceKm: 3.2,
-              durationMins: 8,
-              surgeMultiplier: 1.0,
-              discountAmount: 0.50,
-              totalFare: currentRide.coPassenger.fare || 1.5,
-              paymentMethod: 'card',
-              isShared: true,
-              seatsBooked: currentRide.coPassenger.seatsBooked || 1,
-              status: 'completed',
-              requestedAt: new Date().toLocaleTimeString(),
-              assignedDriverId: currentRide.assignedDriverId,
-              driverName: currentRide.driverName,
-              driverPhone: currentRide.driverPhone,
-              driverAvatar: currentRide.driverAvatar,
-              vehicleModel: currentRide.vehicleModel,
-              licensePlate: currentRide.licensePlate,
-              completedAt: new Date().toLocaleTimeString(),
-            };
-            saveRideToFirestore(coRiderCompletion);
-            syncRideToHostinger(coRiderCompletion);
-            broadcastRideEvent('RIDE_STATUS_UPDATED', coRiderCompletion);
-          }
-
-          // If this dropoff belongs to primary Passenger (Rider A), broadcast Rider A's completion record
-          if (
-            activeWaypoint.passengerId === currentRide.passengerId ||
-            activeWaypoint.passengerName === currentRide.passengerName
-          ) {
-            const riderACompletion: RideRequest = {
-              ...currentRide,
-              status: 'completed',
-              completedAt: new Date().toLocaleTimeString(),
-            };
-            saveRideToFirestore(riderACompletion);
-            syncRideToHostinger(riderACompletion);
-            broadcastRideEvent('RIDE_STATUS_UPDATED', riderACompletion);
-          }
-        }
-
-        // Determine if ride status should transition
-        let newStatus: RideStatus = currentRide.status === 'driver_arrived' ? 'in_progress' : currentRide.status;
-        if (activeWaypoint.type === 'PICKUP') {
-          newStatus = 'in_progress';
-        }
-
-        if (newStatus === 'in_progress' && currentRide.status !== 'in_progress') {
-          handleRideStartCommissionDeduction(currentRide);
-        }
-
-        if (!remainingPending) {
-          // All waypoints completed! Complete entire ride
-          newStatus = 'completed';
-          sounds.playCompletedSound();
-          handleTripCommissionAndEarnings(currentRide);
-        }
-
-        const updatedRide: RideRequest = {
-          ...currentRide,
-          status: newStatus,
-          optimalWaypointsSequence: updatedWaypoints,
-          startedAt: newStatus === 'in_progress' ? (currentRide.startedAt || new Date().toLocaleTimeString()) : currentRide.startedAt,
-          completedAt: newStatus === 'completed' ? new Date().toLocaleTimeString() : currentRide.completedAt,
-        };
-
-        setCurrentRide(updatedRide);
-        saveRideToFirestore(updatedRide);
-        syncRideToHostinger(updatedRide);
-        broadcastRideEvent('RIDE_STATUS_UPDATED', updatedRide);
-        return;
-      }
+      const inProgressRide: RideRequest = {
+        ...currentRide,
+        status: 'in_progress',
+        startedAt: currentRide.startedAt || new Date().toLocaleTimeString(),
+        optimalWaypointsSequence: updatedWaypoints || currentRide.optimalWaypointsSequence,
+      };
+      setCurrentRide(inProgressRide);
+      saveRideToFirestore(inProgressRide);
+      syncRideToHostinger(inProgressRide);
+      broadcastRideEvent('RIDE_STATUS_UPDATED', inProgressRide);
+      return;
     }
 
-    // Standard sequence fallback if no waypoints list
-    const sequence: Record<RideStatus, RideStatus> = {
-      idle: 'searching',
-      searching: 'accepted',
-      accepted: 'driver_arrived',
-      driver_arrived: 'in_progress',
-      in_progress: 'completed',
-      completed: 'completed',
-      cancelled: 'cancelled',
-    };
-
-    const normalizedStatus = (currentRide.status ? currentRide.status.toLowerCase() : 'accepted') as RideStatus;
-    const nextStatus = sequence[normalizedStatus] || sequence[currentRide.status] || 'completed';
-
-    if (nextStatus === 'driver_arrived') {
-      sounds.playIncomingPing();
-    } else if (nextStatus === 'in_progress') {
-      sounds.playAcceptedChime();
-      if (currentRide.status !== 'in_progress') {
-        handleRideStartCommissionDeduction(currentRide);
+    // 3. Step 3: in_progress -> completed ("✅ DHAMMEE SAFARKA • FINISH TRIP")
+    if (currentRide.status === 'in_progress') {
+      // Check if intermediate stacked co-passenger waypoint exists
+      const waypoints = currentRide.optimalWaypointsSequence;
+      if (waypoints && waypoints.length > 2 && currentRide.coPassenger) {
+        const nextPendingIndex = waypoints.findIndex((w) => w.status === 'pending');
+        if (nextPendingIndex !== -1) {
+          const activeWp = waypoints[nextPendingIndex];
+          const updatedWaypoints = waypoints.map((w, idx) =>
+            idx === nextPendingIndex ? { ...w, status: 'completed' as const } : w
+          );
+          const hasMorePending = updatedWaypoints.some((w) => w.status === 'pending');
+          if (hasMorePending) {
+            sounds.playIncomingPing();
+            const updated: RideRequest = {
+              ...currentRide,
+              status: 'in_progress',
+              optimalWaypointsSequence: updatedWaypoints,
+            };
+            setCurrentRide(updated);
+            saveRideToFirestore(updated);
+            syncRideToHostinger(updated);
+            broadcastRideEvent('RIDE_STATUS_UPDATED', updated);
+            return;
+          }
+        }
       }
-    } else if (nextStatus === 'completed') {
+
+      // Finish trip, trigger commission & earnings, deduct time/fares
       sounds.playCompletedSound();
       handleTripCommissionAndEarnings(currentRide);
+
+      const updatedWaypoints = currentRide.optimalWaypointsSequence
+        ? currentRide.optimalWaypointsSequence.map((w) => ({ ...w, status: 'completed' as const }))
+        : undefined;
+
+      const completedRide: RideRequest = {
+        ...currentRide,
+        status: 'completed',
+        completedAt: new Date().toLocaleTimeString(),
+        optimalWaypointsSequence: updatedWaypoints || currentRide.optimalWaypointsSequence,
+      };
+      setCurrentRide(completedRide);
+      saveRideToFirestore(completedRide);
+      syncRideToHostinger(completedRide);
+      broadcastRideEvent('RIDE_STATUS_UPDATED', completedRide);
+      return;
     }
 
-    const updatedRide: RideRequest = {
+    // Fallback: complete ride
+    sounds.playCompletedSound();
+    handleTripCommissionAndEarnings(currentRide);
+    const completedRide: RideRequest = {
       ...currentRide,
-      status: nextStatus,
-      startedAt: nextStatus === 'in_progress' ? new Date().toLocaleTimeString() : currentRide.startedAt,
-      completedAt: nextStatus === 'completed' ? new Date().toLocaleTimeString() : currentRide.completedAt,
+      status: 'completed',
+      completedAt: new Date().toLocaleTimeString(),
     };
-
-    setCurrentRide(updatedRide);
-    saveRideToFirestore(updatedRide);
-    syncRideToHostinger(updatedRide);
-    broadcastRideEvent('RIDE_STATUS_UPDATED', updatedRide);
+    setCurrentRide(completedRide);
+    saveRideToFirestore(completedRide);
+    syncRideToHostinger(completedRide);
+    broadcastRideEvent('RIDE_STATUS_UPDATED', completedRide);
   };
 
   // Rate and Tip
   const rateAndTipRide = (rating: number, tip: number) => {
     if (currentRide) {
+      const rideId = currentRide.id;
+      dismissedRideIdsRef.current.add(rideId);
       if (tip > 0) {
         const targetPassengerId = currentRide.passengerId || currentUser?.id || 'passenger_default';
         setUserWallets((prev) => {
@@ -4740,6 +4699,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ]);
       }
       resetRideState();
+      broadcastRideEvent('RIDE_RATING_SUBMITTED', { rideId, rating, tip });
     }
   };
 
@@ -5040,6 +5000,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetRideState = () => {
+    if (currentRide?.id) {
+      dismissedRideIdsRef.current.add(currentRide.id);
+    }
     setCurrentRide(null);
     setIncomingDriverRequest(null);
     try {

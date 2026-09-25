@@ -229,6 +229,7 @@ export interface RideRequest {
   licensePlate?: string;
   license_plate?: string;
   requestedAt: string;
+  arrivedAt?: string;
   startedAt?: string;
   completedAt?: string;
   cancellationReason?: string;

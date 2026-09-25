@@ -11,130 +11,68 @@ export const WadaageRiderHeroHeader: React.FC<WadaageRiderHeroHeaderProps> = ({
   onOpenNotifications,
 }) => {
   return (
-    <div className="relative w-full overflow-hidden select-none bg-slate-900 shrink-0">
+    <header className="relative w-full overflow-hidden select-none bg-slate-900 shrink-0 z-30 shadow-md">
       {/* 1. Background City Twilight Skyline Image */}
       <div className="absolute inset-0 z-0">
         <img
           src="/images/wadaage_hero_hargeisa.jpg"
           alt="Hargeisa Twilight Skyline"
-          className="w-full h-full object-cover object-center scale-105 filter contrast-110 brightness-95"
+          className="w-full h-full object-cover object-center filter contrast-110 brightness-90"
           onError={(e) => {
-            // Fallback gradient if file is loading
             (e.currentTarget as HTMLElement).style.display = 'none';
           }}
         />
-        {/* Soft Vignette and Evening Sky Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/20 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+        {/* Evening Sky Gradient Overlays */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-900/60 to-slate-950/80" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-transparent" />
       </div>
 
-      {/* 2. Top Simulated iOS Status Bar */}
-      <div className="relative z-20 px-6 pt-3 pb-1 flex items-center justify-between text-white text-xs font-semibold tracking-tight opacity-95">
-        <span>9:41</span>
-        <div className="flex items-center space-x-2 text-white">
-          {/* Cellular bars */}
-          <div className="flex items-end space-x-0.5 h-3">
-            <span className="w-0.5 h-1 bg-white rounded-full" />
-            <span className="w-0.5 h-1.5 bg-white rounded-full" />
-            <span className="w-0.5 h-2.5 bg-white rounded-full" />
-            <span className="w-0.5 h-3 bg-white rounded-full" />
-          </div>
-          {/* WiFi icon */}
-          <svg className="w-3.5 h-3.5 fill-white" viewBox="0 0 24 24">
-            <path d="M12 4C7.31 4 3.07 5.9 0 8.98L12 21 24 8.98C20.93 5.9 16.69 4 12 4zm0 3.5c3.8 0 7.23 1.54 9.72 4.03L12 19.26 2.28 11.53C4.77 9.04 8.2 7.5 12 7.5z" />
-          </svg>
-          {/* Battery pill */}
-          <div className="w-5 h-2.5 rounded-sm border border-white p-0.5 flex items-center">
-            <div className="w-full h-full bg-white rounded-2xs" />
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Action Buttons & Center Wadaage Brand Identity */}
-      <div className="relative z-20 px-4 pt-1 pb-6 flex items-start justify-between">
+      {/* 2. Compact Brand Bar (Menu Button | Wadaage Logo & Tagline | Notification Button) */}
+      <div className="relative z-20 px-3 py-2 flex items-center justify-between">
         {/* Left: Round Blue Menu Button */}
         <button
           type="button"
           onClick={onOpenMenu}
-          className="w-10 h-10 rounded-full bg-[#0077E6]/90 hover:bg-[#0077E6] backdrop-blur-md flex items-center justify-center text-white shadow-lg active:scale-90 transition border border-white/25 cursor-pointer mt-1"
+          className="w-9 h-9 rounded-full bg-[#0077E6]/90 hover:bg-[#0077E6] active:scale-90 backdrop-blur-md flex items-center justify-center text-white shadow-md transition border border-white/20 cursor-pointer shrink-0"
           aria-label="Fura Liiska (Open Menu)"
         >
           <Menu className="w-5 h-5 stroke-[2.5]" />
         </button>
 
-        {/* Center: Official Wadaage Brand Art */}
-        <div className="flex flex-col items-center justify-center text-center px-2 flex-1 min-w-0">
-          {/* Arc above Logo & Main Wadaage Wordmark */}
-          <div className="relative flex flex-col items-center">
-            {/* Glowing orbital arc */}
-            <svg
-              className="w-48 h-6 text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)] -mb-3"
-              viewBox="0 0 200 40"
-              fill="none"
-            >
+        {/* Center: Compact Wadaage Brand Identity */}
+        <div className="flex items-center space-x-2 px-2">
+          {/* Wadaage Lime Pin Logo */}
+          <div className="relative shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">
+            <svg viewBox="0 0 44 54" className="w-6 h-7" fill="none">
               <path
-                d="M 15 35 Q 100 2 185 35"
-                stroke="currentColor"
-                strokeWidth="3.5"
-                strokeLinecap="round"
+                d="M22 2C10.95 2 2 10.95 2 22C2 37 22 52 22 52S42 37 42 22C42 10.95 33.05 2 22 2Z"
+                fill="#76D600"
               />
+              <circle cx="22" cy="21" r="9" fill="#0077E6" />
+              <circle cx="22" cy="21" r="4" fill="#FFFFFF" />
             </svg>
+          </div>
 
-            {/* Custom Wadaage Logo typography */}
-            <div className="flex items-center justify-center -space-x-1">
-              {/* Vibrant Lime-Green Map Pin with Blue and White concentric center */}
-              <div className="relative shrink-0 -mr-1.5 drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]">
-                <svg viewBox="0 0 44 54" className="w-10 h-12" fill="none">
-                  {/* Pin Body */}
-                  <path
-                    d="M22 2C10.95 2 2 10.95 2 22C2 37 22 52 22 52S42 37 42 22C42 10.95 33.05 2 22 2Z"
-                    fill="#76D600"
-                  />
-                  {/* Outer Blue Circle */}
-                  <circle cx="22" cy="21" r="9" fill="#0077E6" />
-                  {/* Inner White Dot */}
-                  <circle cx="22" cy="21" r="4" fill="#FFFFFF" />
-                </svg>
-              </div>
-
-              {/* Bold Wadaage Wordmark with White outline styling */}
+          <div className="flex flex-col items-start leading-none">
+            <div className="flex items-baseline space-x-1.5">
               <span
-                className="text-4xl font-black tracking-tight text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.7)]"
+                className="text-xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
                 style={{
                   fontFamily: 'ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, sans-serif',
                   letterSpacing: '-0.02em',
                 }}
               >
-                adaage
+                Wadaage
+              </span>
+              <span
+                className="text-[9px] font-black tracking-widest text-[#C6F200] uppercase bg-[#C6F200]/15 px-1.5 py-0.5 rounded border border-[#C6F200]/30"
+              >
+                TAXI & WADAAG
               </span>
             </div>
-          </div>
-
-          {/* Subtitle Bar: — TAXI & WADAAG — */}
-          <div className="flex items-center justify-center space-x-2 mt-1">
-            <span className="h-[2.5px] w-6 bg-[#C6F200] rounded-full shadow-xs" />
-            <span
-              className="text-xs font-black tracking-[0.22em] text-[#C6F200] uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
-              style={{ fontFamily: 'system-ui, sans-serif' }}
-            >
-              TAXI & WADAAG
+            <span className="text-[10px] text-slate-300 font-medium tracking-wide mt-0.5">
+              Hargeisa • Dadka isku xidh, safarka fududee
             </span>
-            <span className="h-[2.5px] w-6 bg-[#C6F200] rounded-full shadow-xs" />
-          </div>
-
-          {/* Cursive Hargeisa */}
-          <div
-            className="text-2xl font-serif italic text-white tracking-wide mt-[-2px] drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]"
-            style={{
-              fontFamily: '"Brush Script MT", "Caveat", "Dancing Script", cursive, Georgia, serif',
-            }}
-          >
-            Hargeisa
-          </div>
-
-          {/* Slogan */}
-          <div className="text-[10px] font-medium text-white/95 tracking-wide mt-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-            Dadka isku xidh, safarka fududee
           </div>
         </div>
 
@@ -142,35 +80,36 @@ export const WadaageRiderHeroHeader: React.FC<WadaageRiderHeroHeaderProps> = ({
         <button
           type="button"
           onClick={onOpenNotifications}
-          className="relative w-10 h-10 rounded-full bg-[#0077E6]/90 hover:bg-[#0077E6] backdrop-blur-md flex items-center justify-center text-white shadow-lg active:scale-90 transition border border-white/25 cursor-pointer mt-1"
+          className="relative w-9 h-9 rounded-full bg-[#0077E6]/90 hover:bg-[#0077E6] active:scale-90 backdrop-blur-md flex items-center justify-center text-white shadow-md transition border border-white/20 cursor-pointer shrink-0"
           aria-label="Ogaysiisyada (Notifications)"
         >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+          <Bell className="w-4 h-4" />
+          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-slate-900" />
         </button>
       </div>
 
-      {/* 4. Fluid Layered Bottom Waves (Lime Green & Electric Blue) */}
-      <div className="relative w-full leading-none z-20 pointer-events-none -mb-1">
+      {/* 3. Subtle Sleek Dual-Color Wave Accent (Lime Green & Electric Blue) */}
+      <div className="relative w-full leading-none z-20 pointer-events-none -mb-[1px]">
         <svg
-          viewBox="0 0 1440 180"
+          viewBox="0 0 1440 40"
           fill="none"
           preserveAspectRatio="none"
-          className="w-full h-12 block"
+          className="w-full h-2 block"
         >
-          {/* Lime Green Accent Wave (Back Layer) */}
+          {/* Lime Green Accent Wave */}
           <path
-            d="M0,40 C280,140 520,-20 840,90 C1120,190 1340,30 1440,60 L1440,180 L0,180 Z"
+            d="M0,10 C320,35 640,-10 960,25 C1200,45 1360,10 1440,20 L1440,40 L0,40 Z"
             fill="#76D600"
-            opacity="0.95"
+            opacity="0.9"
           />
-          {/* Electric Blue Wave (Front Layer) */}
+          {/* Electric Blue Wave */}
           <path
-            d="M0,70 C300,160 560,0 880,110 C1160,200 1360,60 1440,80 L1440,180 L0,180 Z"
+            d="M0,20 C360,40 700,5 1020,30 C1240,45 1380,20 1440,25 L1440,40 L0,40 Z"
             fill="#0077E6"
           />
         </svg>
       </div>
-    </div>
+    </header>
   );
 };
+
