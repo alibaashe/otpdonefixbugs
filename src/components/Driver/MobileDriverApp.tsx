@@ -110,6 +110,7 @@ export const MobileDriverApp: React.FC = () => {
     driverGpsStatus,
     recalibrateDriverGps,
     toggleDriverLiveGps,
+    updateDriverLiveCoordinates,
     allPlatformRides,
   } = useRide();
 
@@ -161,16 +162,69 @@ export const MobileDriverApp: React.FC = () => {
 
   const isKycPending = (currentAppRecord?.status === 'pending' || currentDriverRecord?.kycStatus === 'pending') && !isKycApproved;
 
-  // Request browser & mobile push notification permissions when driver goes online
+  // 1. Initial Launch: Request Notification permission, Screen Wake Lock, and Hardware GPS automatically
+  useEffect(() => {
+    // Proactively request browser & mobile notification permission on launch
+    notificationService.requestPermission();
+    notificationService.requestWakeLock();
+
+    // Query high-precision phone hardware GPS immediately on first open
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          console.log('[MobileDriverApp] Real-time Hardware GPS acquired on first open:', pos.coords.latitude, pos.coords.longitude);
+          updateDriverLiveCoordinates(
+            pos.coords.latitude,
+            pos.coords.longitude,
+            pos.coords.accuracy,
+            pos.coords.heading || 0,
+            pos.coords.speed || 0,
+            true
+          );
+          // Set driver to online and available immediately
+          toggleDriverOnline(true);
+        },
+        (err) => {
+          console.warn('[MobileDriverApp] Hardware GPS initial acquisition warning:', err.message);
+          recalibrateDriverGps();
+          toggleDriverOnline(true);
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    } else {
+      recalibrateDriverGps();
+      toggleDriverOnline(true);
+    }
+
+    // Listen to background service worker wake-up messages
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      const handleSwMsg = (e: MessageEvent) => {
+        if (e.data?.type === 'WAKE_AND_OPEN_ORDER') {
+          notificationService.requestWakeLock();
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleSwMsg);
+      return () => navigator.serviceWorker.removeEventListener('message', handleSwMsg);
+    }
+  }, [recalibrateDriverGps, toggleDriverOnline, updateDriverLiveCoordinates]);
+
+  // Keep screen wake lock active while driver is online waiting for orders
   useEffect(() => {
     if (driverModeOnline) {
       notificationService.requestPermission();
+      notificationService.requestWakeLock();
+    } else {
+      notificationService.releaseWakeLock();
     }
+    return () => {
+      notificationService.releaseWakeLock();
+    };
   }, [driverModeOnline]);
 
   // Trigger push notification, vibration, and background alert on incoming ride request
   useEffect(() => {
     if (incomingDriverRequest) {
+      notificationService.requestWakeLock();
       const fareUsd = incomingDriverRequest.totalFare || 2.50;
       const fareSos = Math.round(fareUsd * EXCHANGE_RATE_USD_TO_SLSH);
 
@@ -249,7 +303,13 @@ export const MobileDriverApp: React.FC = () => {
   return (
     <div className="relative w-full h-full min-h-full flex flex-col bg-[#f4f7f6] text-slate-800 overflow-hidden font-sans select-none">
       {/* 0. GPS Location Permission on Opening Driver App */}
-      <LocationPermissionPrompt updatePickupLocation={false} />
+      <LocationPermissionPrompt
+        updatePickupLocation={false}
+        onLocationResolved={(coords) => {
+          updateDriverLiveCoordinates(coords.lat, coords.lng, 5, 0, 0, true);
+          toggleDriverOnline(true);
+        }}
+      />
 
       {/* 1. HOME TAB: FULL-SCREEN INTERACTIVE RADAR MAP & CONTROLS */}
       {activeTab === 'home' && (
@@ -290,53 +350,56 @@ export const MobileDriverApp: React.FC = () => {
               </button>
             </div>
 
-            {/* Two Status & Earnings Cards (exact replica of image.png) */}
-            <div className="grid grid-cols-2 gap-2.5 pointer-events-auto">
-              {/* Left Card: Online/Offline Status */}
+            {/* Compact Status & Quick Stats Bar (small size, non-obtrusive for maximum map visibility) */}
+            <div className="flex items-center justify-between gap-2 pointer-events-auto">
+              {/* Small Online/Offline Toggle Pill */}
               <button
                 type="button"
                 onClick={handleToggleOnline}
-                className="bg-white/95 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 shadow-md border border-slate-200/80 flex items-center space-x-2.5 text-left active:scale-[0.98] transition hover:bg-white cursor-pointer"
+                className="bg-white/95 backdrop-blur-md rounded-full px-3 py-1.5 shadow-md border border-slate-200/80 flex items-center space-x-2 active:scale-95 transition hover:bg-white cursor-pointer"
+                title="Toggle Driver Online / Offline"
               >
-                <div className="relative flex h-3 w-3 shrink-0">
+                <div className="relative flex h-2.5 w-2.5 shrink-0">
                   <span
                     className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                       driverModeOnline ? 'bg-emerald-500' : 'bg-slate-400'
                     }`}
                   />
                   <span
-                    className={`relative inline-flex rounded-full h-3 w-3 ${
+                    className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
                       driverModeOnline ? 'bg-emerald-500' : 'bg-slate-400'
                     }`}
                   />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-black text-slate-900 block truncate">
-                    {driverModeOnline ? 'You are Online' : 'You are Offline'}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium block truncate">
-                    {driverModeOnline ? 'Ready to drive in Hargeisa' : 'Tap to go online'}
-                  </span>
-                </div>
+                <span className="text-xs font-black text-slate-900">
+                  {driverModeOnline ? 'Online' : 'Offline'}
+                </span>
               </button>
 
-              {/* Right Card: Today's Earnings in SLSH */}
+              {/* Small Today's Earnings Pill */}
               <button
                 type="button"
                 onClick={() => setActiveTab('earnings')}
-                className="bg-white/95 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 shadow-md border border-slate-200/80 flex items-center space-x-2.5 text-left active:scale-[0.98] transition hover:bg-white cursor-pointer"
+                className="bg-white/95 backdrop-blur-md rounded-full px-3 py-1.5 shadow-md border border-slate-200/80 flex items-center space-x-1.5 active:scale-95 transition hover:bg-white cursor-pointer"
+                title="View Today's Earnings"
               >
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-black text-slate-900 font-mono block truncate">
-                    SLSH {todayEarningsSlsh.toLocaleString()}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium block truncate">
-                    Today's Earnings
-                  </span>
-                </div>
+                <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-xs font-black text-slate-900 font-mono">
+                  SLSH {todayEarningsSlsh.toLocaleString()}
+                </span>
+              </button>
+
+              {/* Small Fuel Level Pill */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('fuel')}
+                className="bg-white/95 backdrop-blur-md rounded-full px-3 py-1.5 shadow-md border border-slate-200/80 flex items-center space-x-1.5 active:scale-95 transition hover:bg-white cursor-pointer"
+                title="Vehicle Fuel Level"
+              >
+                <FuelIcon className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-xs font-black text-slate-900 font-mono">
+                  {Math.round(fuelPercentage)}%
+                </span>
               </button>
             </div>
 
@@ -574,49 +637,6 @@ export const MobileDriverApp: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* MAP FLOATING BOTTOM CONTROLS (when idle, matching image.png) */}
-          {(!incomingDriverRequest || currentRide) && (!currentRide || currentRide.status === 'idle' || currentRide.status === 'searching') && (
-            <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-auto">
-              {/* Fuel Level Card matching image.png */}
-              <button
-                type="button"
-                onClick={() => setActiveTab('fuel')}
-                className="bg-white/95 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 shadow-lg border border-slate-200/80 flex items-center space-x-2.5 hover:bg-white active:scale-95 transition cursor-pointer"
-              >
-                <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow shrink-0">
-                  <FuelIcon className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <div className="flex items-center space-x-1">
-                    <span className="text-sm font-black text-slate-900 font-mono">
-                      {Math.round(fuelPercentage)}%
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      ({currentFuelLiters.toFixed(1)}L)
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-emerald-600 font-extrabold flex items-center">
-                    Fuel Level <ChevronRight className="w-3 h-3 ml-0.5" />
-                  </span>
-                </div>
-              </button>
-
-              {/* Large Go Offline / Go Online Button */}
-              <button
-                type="button"
-                onClick={handleToggleOnline}
-                className={`px-5 py-3 rounded-2xl font-black text-xs sm:text-sm flex items-center space-x-2 shadow-xl transition active:scale-95 text-white cursor-pointer ${
-                  driverModeOnline
-                    ? 'bg-rose-600 hover:bg-rose-500'
-                    : 'bg-emerald-600 hover:bg-emerald-500'
-                }`}
-              >
-                <Power className="w-4 h-4" />
-                <span>{driverModeOnline ? 'Go Offline' : 'Go Online'}</span>
-              </button>
             </div>
           )}
 
@@ -1912,64 +1932,7 @@ export const MobileDriverApp: React.FC = () => {
             )}
               </div>
             )
-          ) : driverModeOnline ? (
-            /* Live Driver Radar Standby Mode (Online & Ready) */
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-emerald-100 relative overflow-hidden space-y-4 text-center">
-              <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-                <div className="absolute inset-0 rounded-full bg-[#008751]/10 animate-ping" />
-                <div className="w-12 h-12 rounded-full bg-[#008751] text-white flex items-center justify-center shadow-lg">
-                  <Radio className="w-6 h-6 animate-pulse" />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#008751] animate-ping" />
-                  <h4 className="font-black text-sm text-slate-900 font-sans">
-                    Radar-ka Wadaage Wuu Shaqaynayaa
-                  </h4>
-                </div>
-                <p className="text-xs text-slate-500 font-medium max-w-xs mx-auto">
-                  Waxaad ku jirtaa khadka (Online). Safarrada cusub ee rakaabka Hargeisa ayaa halkan si toos ah kugu soo gaadhi doona.
-                </p>
-              </div>
-
-              <div className="bg-[#f8faf9] rounded-2xl p-3 border border-slate-100 flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-2 text-slate-600 font-bold">
-                  <MapPin className="w-4 h-4 text-[#008751]" />
-                  <span>GPS Dispatch Radius: <b className="text-slate-900">{getDispatchRadiusKm()} KM</b></span>
-                </div>
-                <span className="font-extrabold text-[#008751] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                  Strict GPS Match
-                </span>
-              </div>
-            </div>
-          ) : (
-            /* Driver Offline Standby Card */
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 relative overflow-hidden space-y-3.5 text-center">
-              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                <Car className="w-6 h-6" />
-              </div>
-
-              <div className="space-y-1">
-                <h4 className="font-extrabold text-sm text-slate-800 font-sans">
-                  Khadka Kama Jirto (Offline)
-                </h4>
-                <p className="text-xs text-slate-500 font-medium">
-                  Daar badhanka kore ee <span className="font-bold text-[#008751]">"Available for Ride"</span> si aad u bilowdo qaadashada safarrada.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleToggleOnline}
-                className="w-full py-3 rounded-full bg-[#008751] hover:bg-[#007043] text-white font-black text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center space-x-2"
-              >
-                <Zap className="w-4 h-4" />
-                <span>Gal Khadka (Go Online Now)</span>
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ interface UserRecord {
   rating: number;
   trips: number;
   status: 'Active' | 'Blocked' | 'Suspended';
+  password?: string;
 }
 
 const STORAGE_USERS_KEY = 'wadaage_registered_users';
@@ -226,6 +227,9 @@ export const UserManagementTable: React.FC = () => {
     adminCreditDriverWallet,
     adminCreditUserWallet,
     pricing,
+    updateUserPassword,
+    registerRider,
+    registerDriver,
   } = useRide();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -445,6 +449,7 @@ export const UserManagementTable: React.FC = () => {
         email: formEmail.trim(),
         phone: formPhone.trim(),
         role: formRole,
+        password: formPassword.trim() || editingUser.password,
       };
 
       setUsers((prev) =>
@@ -458,6 +463,7 @@ export const UserManagementTable: React.FC = () => {
         email: updatedUser.email,
         phone: updatedUser.phone,
         role: formRole === 'Sub-Admin' ? 'admin' : formRole === 'Driver' ? 'driver' : 'passenger',
+        password: formPassword.trim() || editingUser.password,
       });
     } else {
       targetUserId = `usr_${Date.now()}`;
@@ -470,8 +476,26 @@ export const UserManagementTable: React.FC = () => {
         rating: 5.0,
         trips: 0,
         status: 'Active',
+        password: formPassword.trim() || undefined,
       };
       setUsers((prev) => [newUser, ...prev]);
+
+      // If Driver, register driver in store
+      if (formRole === 'Driver') {
+        registerDriver({
+          name: newUser.name,
+          phone: newUser.phone,
+          password: formPassword.trim() || undefined,
+          vehicleCategory: 'wadaage_both',
+          autoApprove: true,
+        });
+      } else if (formRole === 'Passenger') {
+        registerRider({
+          name: newUser.name,
+          phone: newUser.phone,
+          password: formPassword.trim() || undefined,
+        });
+      }
 
       // Save to backend database & Firestore
       saveUserToFirestore({
@@ -480,17 +504,17 @@ export const UserManagementTable: React.FC = () => {
         email: newUser.email,
         phone: newUser.phone,
         role: formRole === 'Sub-Admin' ? 'admin' : formRole === 'Driver' ? 'driver' : 'passenger',
+        password: formPassword.trim() || undefined,
       });
     }
 
-    // Securely hash and update password on server if entered
+    // Securely hash and update password across all stores smoothly
     if (formPassword.trim()) {
       try {
-        await fetch(`/api/admin/users/${targetUserId}/password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: formPassword.trim() }),
-        });
+        await updateUserPassword(targetUserId, formPassword.trim());
+        if (formPhone.trim()) {
+          await updateUserPassword(formPhone.trim(), formPassword.trim());
+        }
       } catch (_e) {}
     }
 

@@ -255,6 +255,7 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
     dropoffLocation,
     drivers,
     currentRide,
+    incomingDriverRequest,
     setPickupLocation,
     setDropoffLocation,
     role,
@@ -262,14 +263,19 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
 
   // Stable references and memoized coordinates
   const EMPTY_STOPS: LocationNode[] = useMemo(() => [], []);
-  const activePickup: LocationNode | null = useMemo(
-    () => currentRide?.pickup || pickupLocation || null,
-    [currentRide?.pickup, pickupLocation]
-  );
-  const activeDropoff: LocationNode | null = useMemo(
-    () => currentRide?.dropoff || dropoffLocation || null,
-    [currentRide?.dropoff, dropoffLocation]
-  );
+  const activePickup: LocationNode | null = useMemo(() => {
+    if (role === 'driver') {
+      return currentRide?.pickup || incomingDriverRequest?.pickup || null;
+    }
+    return currentRide?.pickup || pickupLocation || null;
+  }, [role, currentRide?.pickup, incomingDriverRequest?.pickup, pickupLocation]);
+
+  const activeDropoff: LocationNode | null = useMemo(() => {
+    if (role === 'driver') {
+      return currentRide?.dropoff || incomingDriverRequest?.dropoff || null;
+    }
+    return currentRide?.dropoff || dropoffLocation || null;
+  }, [role, currentRide?.dropoff, incomingDriverRequest?.dropoff, dropoffLocation]);
   const coPassengerPickup: LocationNode | null = useMemo(
     () => currentRide?.coPassenger?.pickupLocation || null,
     [currentRide?.coPassenger?.pickupLocation]
@@ -436,7 +442,7 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
         },
       });
 
-      // Glow Ring Layer
+      // Glow Ring Layer (subtle pulse when assigned)
       map.addLayer({
         id: 'driver-location-glow',
         type: 'circle',
@@ -453,27 +459,33 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
             18,
             22,
           ],
-          'circle-color': [
+          'circle-color': '#10b981',
+          'circle-opacity': [
             'case',
             ['==', ['get', 'isAssigned'], 1],
-            '#059669',
-            '#0f172a',
+            0.35,
+            0.0,
           ],
-          'circle-opacity': 0.9,
-          'circle-stroke-width': 2.5,
+          'circle-stroke-width': 1.5,
           'circle-stroke-color': '#ffffff',
+          'circle-stroke-opacity': [
+            'case',
+            ['==', ['get', 'isAssigned'], 1],
+            0.5,
+            0.0,
+          ],
         },
       });
 
-      // Center Core Dot
+      // Center Core Dot (transparent so HTML DOM white car marker renders cleanly)
       map.addLayer({
         id: 'driver-location-point',
         type: 'circle',
         source: 'driver-location',
         paint: {
-          'circle-radius': 5,
+          'circle-radius': 2,
           'circle-color': '#ffffff',
-          'circle-opacity': 1,
+          'circle-opacity': 0.0,
         },
       });
 
@@ -797,29 +809,51 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
           <div class="relative flex flex-col items-center group">
             ${
               isAssigned
-                ? '<div class="absolute -inset-2 bg-emerald-500/40 rounded-2xl animate-ping"></div>'
+                ? '<div class="absolute -inset-3 bg-emerald-500/40 rounded-full animate-ping"></div>'
                 : ''
             }
 
-            <div id="car-body-${driver.id}" class="w-10 h-10 rounded-2xl ${
-              isAssigned
-                ? 'bg-emerald-500 ring-4 ring-emerald-300 shadow-xl shadow-emerald-500/60'
-                : isOnline
-                ? 'bg-slate-900 ring-2 ring-emerald-400 shadow-lg shadow-slate-950/80'
-                : 'bg-slate-700 ring-1 ring-slate-600'
-            } flex items-center justify-center text-white transition-transform duration-500 ease-out" style="transform: rotate(${heading}deg);">
-              <svg class="w-5 h-5 ${isAssigned ? 'text-slate-950 font-black' : 'text-emerald-400'}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+            <!-- White Small Car Top-Down Body with Directional Heading -->
+            <div id="car-body-${driver.id}" class="relative transition-transform duration-500 ease-out cursor-pointer" style="transform: rotate(${heading}deg);">
+              <svg width="26" height="46" viewBox="0 0 26 46" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));">
+                <!-- Tires -->
+                <rect x="0" y="7" width="3" height="8" rx="1.5" fill="#0f172a"/>
+                <rect x="23" y="7" width="3" height="8" rx="1.5" fill="#0f172a"/>
+                <rect x="0" y="31" width="3" height="8" rx="1.5" fill="#0f172a"/>
+                <rect x="23" y="31" width="3" height="8" rx="1.5" fill="#0f172a"/>
+                <!-- Mirrors -->
+                <path d="M1 13C1 12 2 11 3 12L3 16C2 17 1 16 1 15Z" fill="#F8FAFC" stroke="#64748B" stroke-width="0.75"/>
+                <path d="M25 13C25 12 24 11 23 12L23 16C24 17 25 16 25 15Z" fill="#F8FAFC" stroke="#64748B" stroke-width="0.75"/>
+                <!-- White Aerodynamic Body -->
+                <path d="M3 11C3 5.5 6.5 1 13 1C19.5 1 23 5.5 23 11V35C23 41 19 44.5 13 44.5C7 44.5 3 41 3 35V11Z" fill="#FFFFFF" stroke="${isAssigned ? '#10B981' : '#64748B'}" stroke-width="${isAssigned ? '2' : '1.2'}"/>
+                <!-- Headlights -->
+                <path d="M4.5 2.5C5.5 2 7 2 7.5 3.5L7 5.5C5.5 5 4.5 4 4.5 2.5Z" fill="#FACC15"/>
+                <path d="M21.5 2.5C20.5 2 19 2 18.5 3.5L19 5.5C20.5 5 21.5 4 21.5 2.5Z" fill="#FACC15"/>
+                <!-- Front Windshield -->
+                <path d="M6 13C6.5 12 7.5 11.5 13 11.5C18.5 11.5 19.5 12 20 13L18.5 18C18.2 18.8 17.5 19 13 19C8.5 19 7.8 18.8 7.5 18L6 13Z" fill="#0F172A"/>
+                <!-- White Roof -->
+                <path d="M7.5 19H18.5V28H7.5V19Z" fill="#F8FAFC"/>
+                <rect x="9.5" y="21" width="7" height="5" rx="1" fill="#334155" opacity="0.35"/>
+                <!-- Rear Windshield -->
+                <path d="M7.5 29C7.8 28.5 8.5 28.5 13 28.5C17.5 28.5 18.2 28.5 18.5 29L19.5 33C19 33.8 18 34 13 34C8 34 7 33.8 6.5 33L7.5 29Z" fill="#0F172A"/>
+                <!-- Taillights -->
+                <rect x="4.5" y="42.5" width="3.5" height="1.5" rx="0.5" fill="#EF4444"/>
+                <rect x="18" y="42.5" width="3.5" height="1.5" rx="0.5" fill="#EF4444"/>
               </svg>
+
+              <!-- Online/Available status indicator badge -->
+              <div class="absolute -top-1 -right-1 w-3 h-3 ${isAssigned ? 'bg-emerald-400' : isOnline ? 'bg-emerald-500' : 'bg-slate-400'} rounded-full ring-2 ring-white shadow-sm flex items-center justify-center">
+                <span class="w-1 h-1 bg-white rounded-full"></span>
+              </div>
             </div>
 
-            ${role === 'admin' ? `
-            <div class="mt-1 bg-slate-900/95 text-[10px] font-black text-white px-2 py-0.5 rounded-md shadow-md border border-slate-700/80 whitespace-nowrap flex items-center gap-1">
+            <!-- Available White Car Badge with Driver & Model -->
+            <div class="mt-1 bg-slate-900/90 backdrop-blur-md text-[9px] font-black text-white px-2 py-0.5 rounded-md shadow-md border border-slate-700/80 whitespace-nowrap flex items-center gap-1 scale-90 group-hover:scale-100 transition pointer-events-none">
+              <span class="w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-slate-400'}"></span>
               <span>${(driver?.name || 'Driver').split(' ')[0]}</span>
-              ${isAssigned ? '<span class="text-amber-400">★</span>' : ''}
+              <span class="text-slate-400 font-mono">• ${driver?.vehicle?.model || 'White Car'}</span>
+              ${isAssigned ? '<span class="text-amber-400 font-bold">★ Active</span>' : ''}
             </div>
-            ` : ''}
           </div>
         `;
 
@@ -1255,6 +1289,24 @@ export const MapLibreInteractiveMap: React.FC<MapLibreInteractiveMapProps> = ({
     >
       {/* Mapbox / MapLibre Viewport Container */}
       <div ref={mapContainerRef} className="w-full h-full" />
+
+      {/* Floating Active Route Path Indicator (Showing Pickup -> Drop Point Route) */}
+      {activePickup && activeDropoff && (routeDistanceKm || routeDurationMins) && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none max-w-[92%] sm:max-w-md">
+          <div className="bg-slate-900/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-2xl border border-emerald-500/50 text-white flex items-center space-x-2 text-xs font-bold animate-fadeIn">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+            <span className="text-emerald-400 font-black">{routeDistanceKm || 'Trip Route'}</span>
+            <span className="text-slate-500">•</span>
+            <span className="text-white font-mono">{routeDurationMins || 'Live Route'}</span>
+            {routeSummaryText && (
+              <>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-300 font-medium truncate max-w-[130px] sm:max-w-[180px]">{routeSummaryText}</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Floating Essential Map Controls */}
       <div className="absolute right-3 bottom-4 flex flex-col space-y-2 z-10">

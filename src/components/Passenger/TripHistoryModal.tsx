@@ -35,16 +35,34 @@ export const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ onClose, onR
   const [searchQuery, setSearchQuery] = useState('');
 
   const allTrips: PastTrip[] = useMemo(() => {
-    const list = [...(allPlatformRides || [])];
-    if (currentRide && currentRide.status === 'completed' && !list.some((r) => r.id === currentRide.id)) {
+    let list = [...(allPlatformRides || [])];
+    if (list.length === 0) {
+      try {
+        const raw = localStorage.getItem('wadaage_all_rides_history');
+        if (raw) list = JSON.parse(raw);
+      } catch (_e) {}
+    }
+
+    if (currentRide && (currentRide.status === 'completed' || currentRide.status === 'cancelled') && !list.some((r) => r.id === currentRide.id)) {
       list.unshift(currentRide);
     }
 
-    if (list.length === 0) {
+    // Filter for current passenger if matching ID/phone exists
+    const passengerPhone = (currentUser?.phone || '').replace(/\D/g, '');
+    const passengerId = currentUser?.id;
+    const myTrips = list.filter((r) => {
+      if (!passengerPhone && !passengerId) return true;
+      const rPhone = (r.passengerPhone || '').replace(/\D/g, '');
+      if (passengerId && r.passengerId === passengerId) return true;
+      if (passengerPhone && rPhone && (rPhone.endsWith(passengerPhone) || passengerPhone.endsWith(rPhone))) return true;
+      return !r.passengerId; // platform demo trips
+    });
+
+    if (myTrips.length === 0) {
       return [];
     }
 
-    return list.map((r, idx) => {
+    return myTrips.map((r, idx) => {
       let dateStr = 'Maanta • Recent';
       try {
         if (r.completedAt) {

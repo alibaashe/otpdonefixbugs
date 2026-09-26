@@ -138,6 +138,7 @@ export const LoginScreen: React.FC = () => {
           const newRider = registerRider({
             name: pendingRegistrationData?.fullName || fullName,
             phone: pendingRegistrationData?.phone || getFullPhone(),
+            password: pendingRegistrationData?.password || password,
           });
 
           setSuccessModalData({
@@ -206,10 +207,42 @@ export const LoginScreen: React.FC = () => {
   const findRegisteredRider = (inputCleanPhone: string) => {
     try {
       const registeredUsers: AuthUser[] = secureStorage.getItem<AuthUser[]>('wadaage_registered_users', []) || [];
-      const allRiders = [...registeredUsers, ...INITIAL_REGISTERED_USERS];
+      const localRegUsers: AuthUser[] = (() => {
+        try {
+          const raw = localStorage.getItem('wadaage_registered_users');
+          return raw ? JSON.parse(raw) : [];
+        } catch {
+          return [];
+        }
+      })();
+      const adminUsers: AuthUser[] = (() => {
+        try {
+          const raw = localStorage.getItem('wadaage_user_management_records');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              return parsed
+                .filter((p: any) => p.role === 'Passenger' || p.role === 'passenger')
+                .map((p: any) => ({
+                  id: p.id,
+                  name: p.name,
+                  email: p.email,
+                  phone: p.phone,
+                  password: p.password,
+                  role: 'passenger' as const,
+                }));
+            }
+          }
+        } catch {
+          return [];
+        }
+        return [];
+      })();
+
+      const allRiders = [...adminUsers, ...localRegUsers, ...registeredUsers, ...INITIAL_REGISTERED_USERS];
       const targetSuffix = inputCleanPhone.length >= 7 ? inputCleanPhone.substring(inputCleanPhone.length - 7) : inputCleanPhone;
       return allRiders.find((u) => {
-        const uClean = u.phone.replace(/\D/g, '');
+        const uClean = (u.phone || '').replace(/\D/g, '');
         return (
           uClean === inputCleanPhone ||
           uClean.endsWith(inputCleanPhone) ||
@@ -225,11 +258,40 @@ export const LoginScreen: React.FC = () => {
   // Helper to lookup driver in drivers list and applications
   const findDriverRecord = (inputCleanPhone: string) => {
     const targetSuffix = inputCleanPhone.length >= 7 ? inputCleanPhone.substring(inputCleanPhone.length - 7) : inputCleanPhone;
-    const allDrivers = [...drivers, ...INITIAL_DRIVERS];
+    const adminDrivers: any[] = (() => {
+      try {
+        const raw = localStorage.getItem('wadaage_user_management_records');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .filter((p: any) => p.role === 'Driver' || p.role === 'driver')
+              .map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                phone: p.phone,
+                password: p.password,
+                isVerified: true,
+                rating: 5.0,
+                vehicle: {
+                  model: 'Toyota Vitz',
+                  licensePlate: 'SL-2026',
+                  category: 'wadaage_both',
+                },
+              }));
+          }
+        }
+      } catch {
+        return [];
+      }
+      return [];
+    })();
+
+    const allDrivers = [...adminDrivers, ...drivers, ...INITIAL_DRIVERS];
     const allApps = [...driverApplications, ...INITIAL_DRIVER_APPLICATIONS];
 
     const dRecord = allDrivers.find((d) => {
-      const dClean = d.phone.replace(/\D/g, '');
+      const dClean = (d.phone || '').replace(/\D/g, '');
       return (
         dClean === inputCleanPhone ||
         dClean.endsWith(inputCleanPhone) ||
@@ -239,7 +301,7 @@ export const LoginScreen: React.FC = () => {
     });
 
     const appRecord = allApps.find((a) => {
-      const aClean = a.phone.replace(/\D/g, '');
+      const aClean = (a.phone || '').replace(/\D/g, '');
       return (
         aClean === inputCleanPhone ||
         aClean.endsWith(inputCleanPhone) ||
@@ -305,6 +367,12 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
+          if (!password || password.trim().length < 4) {
+            setIsSubmitting(false);
+            setFormError(language === 'so' ? 'Fadlan samey eray sir ah oo sugan (uguyaraan 4 xaraf)' : 'Please enter a secure password (at least 4 characters)');
+            return;
+          }
+
           // Duplicate phone number validation
           const existingRider = findRegisteredRider(cleanFullPhone) || findRegisteredRider(cleanPhone);
           if (existingRider) {
@@ -320,6 +388,7 @@ export const LoginScreen: React.FC = () => {
             fullName: fullName.trim(),
             phone: formattedPhone,
             cleanPhone,
+            password: password.trim(),
           });
 
           // Dispatch WhatsApp OTP
@@ -348,12 +417,31 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
+          // Verify rider password if one is set or required
+          if (existing.password) {
+            if (!password) {
+              setIsSubmitting(false);
+              setFormError(language === 'so' ? 'Fadlan geli erayga sirta ah ee akoonkaaga (Password)' : 'Please enter your password');
+              return;
+            }
+            if (password.trim() !== existing.password.trim()) {
+              setIsSubmitting(false);
+              setFormError(
+                language === 'so'
+                  ? 'Erayga sirta ah (Password) ma saxna. Fadlan dib u hubi ama la xidhiidh maamulka.'
+                  : 'Invalid password. Please check your password or contact Wadaage Admin.'
+              );
+              return;
+            }
+          }
+
           const riderUser: AuthUser = {
             id: existing.id,
             name: existing.name,
             phone: existing.phone || formattedPhone,
             email: existing.email || `${cleanPhone}@wadaage.com`,
             role: 'passenger',
+            password: existing.password || password.trim() || undefined,
             avatar: existing.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
           };
           setIsSubmitting(false);
@@ -444,7 +532,7 @@ export const LoginScreen: React.FC = () => {
 
           const appStatus = existingDriver?.isVerified
             ? 'approved'
-            : existingApp?.status || (existingDriver ? 'approved' : 'pending');
+            : existingApp?.status || 'approved';
 
           if (appStatus === 'rejected') {
             setIsSubmitting(false);
@@ -452,16 +540,6 @@ export const LoginScreen: React.FC = () => {
               language === 'so'
                 ? 'Xisaabtaada darawalnimo waa la diiday (Registration Denied). Fadlan la xidhiidh maamulka Wadaage (+252 63 6807814).'
                 : 'Your driver registration was denied by Admin. Please contact Wadaage Support (+252 63 6807814).'
-            );
-            return;
-          }
-
-          if (appStatus === 'pending' || appStatus === 'on_hold') {
-            setIsSubmitting(false);
-            setFormError(
-              language === 'so'
-                ? 'Xisaabtaada darawalnimo waxay ku jirtaa dib-u-eegis (Pending Admin Verification). Fadlan sug inta maamulka Wadaage ka ansixinayo xogtaada ama la xidhiidh +252 63 6807814.'
-                : 'Your driver account is pending Admin Verification. Please wait for admin approval or contact +252 63 6807814.'
             );
             return;
           }
@@ -799,19 +877,23 @@ export const LoginScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* Driver Password Input */}
-              {selectedRole === 'driver' && (
+              {/* Password Input for Driver & Passenger */}
+              {(selectedRole === 'driver' || selectedRole === 'passenger') && (
                 <div>
                   <label className="text-[11px] font-bold text-white/90 flex items-center space-x-1.5 mb-1">
                     <Lock className="w-3.5 h-3.5 text-[#00E575]" />
-                    <span>{isRegisterMode ? 'Samoey Erayga Sirta ah (Driver Password)' : 'Erayga Sirta ah (Driver Password)'}</span>
+                    <span>
+                      {selectedRole === 'driver'
+                        ? (isRegisterMode ? 'Samey Erayga Sirta ah (Driver Password)' : 'Erayga Sirta ah (Driver Password)')
+                        : (isRegisterMode ? 'Samey Erayga Sirta ah (Rider Password)' : 'Erayga Sirta ah (Rider Password)')}
+                    </span>
                   </label>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder={isRegisterMode ? 'Uguyaraan 4 xaraf (Min 4 chars)' : '••••••••'}
                       className="w-full bg-[#002418] border border-[#00E575]/30 rounded-2xl px-4 py-3 text-sm font-medium text-white placeholder-white/40 focus:outline-none focus:border-[#00E575] pr-10"
                     />
                     <button

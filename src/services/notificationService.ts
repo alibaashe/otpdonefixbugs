@@ -32,40 +32,68 @@ class NotificationService {
     }
   }
 
-  // CLEAR DUAL-TONE CHIME FOR NEW INCOMING ORDER (Pleasant medium alert chime)
+  private wakeLockSentinel: any = null;
+
+  // Request Screen Wake Lock so phone stays awake while driver is online or order arrives
+  public async requestWakeLock() {
+    if (typeof window === 'undefined' || !('wakeLock' in navigator)) return;
+    try {
+      if (!this.wakeLockSentinel) {
+        this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+        this.wakeLockSentinel.addEventListener('release', () => {
+          this.wakeLockSentinel = null;
+        });
+      }
+    } catch (_e) {}
+  }
+
+  public releaseWakeLock() {
+    try {
+      if (this.wakeLockSentinel) {
+        this.wakeLockSentinel.release().catch(() => {});
+        this.wakeLockSentinel = null;
+      }
+    } catch (_e) {}
+  }
+
+  // CLEAR DUAL-TONE CHIME FOR NEW INCOMING ORDER (High-alert alarm chime with screen wake)
   public startEmergencyOrderRingtone() {
     this.stopEmergencyOrderRingtone();
+    this.requestWakeLock();
     try {
       const playPulse = () => {
         const ctx = this.getAudioContext();
         if (!ctx) return;
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
         const now = ctx.currentTime;
-        // Upbeat 3-tone chime sequence: C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz)
-        const notes = [523.25, 659.25, 783.99];
+        // Urgent 4-tone ascending alert chime: F5 (698.46Hz) -> A5 (880Hz) -> C6 (1046.5Hz) -> F6 (1396.9Hz)
+        const notes = [698.46, 880.0, 1046.5, 1396.91];
         notes.forEach((freq, idx) => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
 
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+          osc.frequency.setValueAtTime(freq, now + idx * 0.11);
 
-          gain.gain.setValueAtTime(0.001, now + idx * 0.12);
-          gain.gain.exponentialRampToValueAtTime(0.25, now + idx * 0.12 + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.28);
+          gain.gain.setValueAtTime(0.001, now + idx * 0.11);
+          gain.gain.exponentialRampToValueAtTime(0.7, now + idx * 0.11 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.28);
 
           osc.connect(gain);
           gain.connect(ctx.destination);
 
-          osc.start(now + idx * 0.12);
-          osc.stop(now + idx * 0.12 + 0.3);
+          osc.start(now + idx * 0.11);
+          osc.stop(now + idx * 0.11 + 0.3);
         });
       };
 
       playPulse();
       this.ringtoneInterval = setInterval(() => {
         playPulse();
-        this.vibrateDevice([400, 150, 400]);
-      }, 1200);
+        this.vibrateDevice([800, 150, 800, 150, 1000]);
+      }, 1400);
     } catch (_e) {}
   }
 
@@ -278,39 +306,38 @@ class NotificationService {
     fareSos: number;
     categoryName?: string;
   }) {
-    // Start continuous chime ringtone
+    // Start continuous chime ringtone and wake up device screen
     this.startEmergencyOrderRingtone();
-    this.vibrateDevice([600, 100, 600, 100, 800]);
+    this.vibrateDevice([800, 200, 800, 200, 1000, 200, 1000]);
 
-    const title = '🚨 DALAB CUSUB! EMERGENCY RIDE ORDER (+5,000 SLSH)';
+    const title = '🚨 DALAB CUSUB! EMERGENCY RIDE ORDER';
     const body = `Rakaab: ${options.passengerName}\nKa: ${options.pickupLocation} ➔ Ku: ${options.dropoffLocation}\nQiimaha: $${options.fareUsd.toFixed(2)} (${options.fareSos.toLocaleString()} SLSH)`;
 
     if (typeof window === 'undefined' || !('Notification' in window)) return;
 
     if (Notification.permission === 'granted') {
       try {
+        const notifOptions: any = {
+          body,
+          icon: '/darwelllogo.png',
+          badge: '/darwelllogo.png',
+          image: '/darwelllogo.png',
+          vibrate: [800, 200, 800, 200, 1000, 200, 1000],
+          tag: 'wadaage-order-urgent-' + Date.now(),
+          requireInteraction: true,
+          renotify: true,
+          silent: false,
+          data: { url: '/?app=driver' },
+          actions: [
+            { action: 'open_order', title: '🚖 Fur Dalabka (Open)' },
+            { action: 'dismiss', title: 'Xidh (Dismiss)' }
+          ]
+        };
+
         if (this.swRegistration && this.swRegistration.showNotification) {
-          await this.swRegistration.showNotification(title, {
-            body,
-            icon: '/favicon.ico',
-            badge: '/favicon.ico',
-            vibrate: [600, 100, 600, 100, 800],
-            tag: 'wadaage-order-emergency-' + Date.now(),
-            requireInteraction: true,
-            renotify: true,
-            data: { url: '/?app=driver' },
-            actions: [
-              { action: 'open_order', title: '🚖 Fur Dalabka (Open)' },
-              { action: 'dismiss', title: 'Xidh (Dismiss)' }
-            ]
-          } as any);
+          await this.swRegistration.showNotification(title, notifOptions);
         } else {
-          new Notification(title, {
-            body,
-            icon: '/favicon.ico',
-            tag: 'wadaage-order-emergency-' + Date.now(),
-            requireInteraction: true,
-          } as any);
+          new Notification(title, notifOptions);
         }
       } catch (e) {
         console.warn('Failed to display native notification:', e);

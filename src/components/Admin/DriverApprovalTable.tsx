@@ -21,7 +21,7 @@ import { deleteApplicationFromFirestore, saveDriverToFirestore } from '../../ser
 import { KeyRound, Lock } from 'lucide-react';
 
 export const DriverApprovalTable: React.FC = () => {
-  const { driverApplications, drivers, updateDriverApplicationStatus, deleteDriverApplication } = useRide();
+  const { driverApplications, drivers, updateDriverApplicationStatus, deleteDriverApplication, updateUserPassword } = useRide();
   const [selectedApp, setSelectedApp] = useState<DriverApplication | null>(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -29,8 +29,8 @@ export const DriverApprovalTable: React.FC = () => {
   const [newDriverPassword, setNewDriverPassword] = useState<string>('');
 
   const handleUpdateDriverPassword = async (app: DriverApplication) => {
-    if (!newDriverPassword || newDriverPassword.trim().length < 6) {
-      setActionSuccessMessage('⚠️ Password-ku waa inuu ka koobnaadaa uguyaraan 6 xaraf (Minimum 6 chars)');
+    if (!newDriverPassword || newDriverPassword.trim().length < 4) {
+      setActionSuccessMessage('⚠️ Password-ku waa inuu ka koobnaadaa uguyaraan 4 xaraf (Minimum 4 chars)');
       setTimeout(() => setActionSuccessMessage(null), 3000);
       return;
     }
@@ -41,14 +41,15 @@ export const DriverApprovalTable: React.FC = () => {
     if (matchingDriver) {
       matchingDriver.password = trimmedPassword;
       saveDriverToFirestore(matchingDriver);
-      // Sync to backend password update endpoint
-      try {
-        await fetch(`/api/admin/users/${matchingDriver.id}/password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: trimmedPassword }),
-        });
-      } catch (_e) {}
+    }
+
+    // Call central updateUserPassword which updates local storage, state, Firestore, and backend API
+    await updateUserPassword(app.id, trimmedPassword);
+    if (app.phone) {
+      await updateUserPassword(app.phone, trimmedPassword);
+    }
+    if (matchingDriver?.id) {
+      await updateUserPassword(matchingDriver.id, trimmedPassword);
     }
 
     setEditingPasswordId(null);

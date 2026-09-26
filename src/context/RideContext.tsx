@@ -63,6 +63,7 @@ import {
   saveTransactionToFirestore,
   subscribeToTransactions,
   saveUserToFirestore,
+  updateUserInFirestore,
   subscribeToUsers,
   saveDriverApplicationToFirestore,
   deleteApplicationFromFirestore,
@@ -277,7 +278,8 @@ interface RideContextType {
   isOrderWithinDriverDispatchRadius: (ride: { pickup?: { lat: number; lng: number }; category?: string } | null | undefined) => { isWithinRadius: boolean; distanceKm: number; allowedRadiusKm: number };
   validateWadaageMatch: (currentTrip: any, newRequest: any, driverLoc?: { lat: number; lng: number }, options?: any) => ValidateWadaageMatchResult;
   // User & Driver Direct Registration (with WhatsApp OTP)
-  registerRider: (userData: { name: string; phone: string; email?: string }) => AuthUser;
+  registerRider: (userData: { name: string; phone: string; email?: string; password?: string }) => AuthUser;
+  updateUserPassword: (userIdOrPhone: string, newPassword: string) => Promise<boolean>;
   registerDriver: (driverData: { name: string; phone: string; password?: string; vehicleCategory: VehicleCategory; vehicleModel?: string; licensePlate?: string; vehicleColor?: string; autoApprove?: boolean }) => { driver: Driver; user: AuthUser; application: DriverApplication };
   // Driver Onboarding & Admin Verification
   driverApplications: DriverApplication[];
@@ -297,6 +299,14 @@ interface RideContextType {
   driverGpsStatus: DriverGpsStatus;
   recalibrateDriverGps: () => Promise<boolean>;
   toggleDriverLiveGps: (enable?: boolean) => void;
+  updateDriverLiveCoordinates: (
+    lat: number,
+    lng: number,
+    accuracy?: number,
+    heading?: number,
+    speed?: number,
+    isHardware?: boolean
+  ) => void;
 }
 
 const getInitialActiveRole = (): UserRole => {
@@ -557,8 +567,25 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [userWallets, transactions]);
 
-  // All Platform Rides (Shared across Admin Dashboard, Dispatcher, and Multi-App state)
-  const [allPlatformRides, setAllPlatformRides] = useState<RideRequest[]>([]);
+  // All Platform Rides (Recorded and stored permanently across Rider, Driver, and Admin)
+  const [allPlatformRides, setAllPlatformRides] = useState<RideRequest[]>(() => {
+    try {
+      const stored = localStorage.getItem('wadaage_all_rides_history');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_e) {}
+    return [];
+  });
+
+  useEffect(() => {
+    if (allPlatformRides.length > 0) {
+      try {
+        localStorage.setItem('wadaage_all_rides_history', JSON.stringify(allPlatformRides.slice(0, 150)));
+      } catch (_e) {}
+    }
+  }, [allPlatformRides]);
 
   // Driver Real-Time Hardware GPS Telematics State
   const [driverGpsStatus, setDriverGpsStatus] = useState<DriverGpsStatus>({
@@ -915,8 +942,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ride: { pickup?: { lat: number; lng: number }; category?: string; currentOfferedDriverId?: string } | null | undefined
   ): { isWithinRadius: boolean; distanceKm: number; allowedRadiusKm: number } => {
     const configuredRadius = getDispatchRadiusKm(ride?.category);
-    // Dynamic city threshold: base configured radius or minimum 3.0 km so drivers across Hargeisa receive trips
-    const allowedRadiusKm = Math.max(configuredRadius || 1.0, 1.0);
+    // Dynamic city threshold: allow city-wide dispatch radius (15.0 km) so active drivers across Hargeisa receive trips
+    const allowedRadiusKm = Math.max(configuredRadius || 1.0, 15.0);
     if (!ride || !ride.pickup || typeof ride.pickup.lat !== 'number' || typeof ride.pickup.lng !== 'number') {
       return { isWithinRadius: true, distanceKm: 0.3, allowedRadiusKm };
     }
@@ -1623,7 +1650,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return Math.max(0, Math.round(ledgerSumUsd * 100) / 100);
     }
 
-    return 0;
+    // Default starter credit ($15.00) so newly installed APK and newly registered drivers can receive orders immediately without lockout
+    return 15.00;
   }, [driverWallets, drivers, currentUser, driverWalletTransactions]);
 
   // Current active driver balance
@@ -1988,7 +2016,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const isTargeted =
                   candidate?.driver.id === currentUser?.id ||
                   candidate?.driver.id === `drv_${currentUser?.id}` ||
-                  (currentUser?.phone && candidate?.driver.phone === currentUser.phone);
+                  (currentUser?.phone && candidate?.driver.phone === currentUser.phone) ||
+                  (role === 'driver' && driverModeOnline && !currentRide);
                 if (!isTargeted) return false;
               }
 
@@ -2130,7 +2159,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const isTargeted =
                 candidate?.driver.id === currentUser?.id ||
                 candidate?.driver.id === `drv_${currentUser?.id}` ||
-                (currentUser?.phone && candidate?.driver.phone === currentUser.phone);
+                (currentUser?.phone && candidate?.driver.phone === currentUser.phone) ||
+                (role === 'driver' && driverModeOnline && !currentRide);
               if (!isTargeted) {
                 setIncomingDriverRequest((prev) => (prev?.id === payload?.id ? null : prev));
                 return;
@@ -3270,6 +3300,14 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIncomingDriverRequest(null);
     }
 
+    // Record and store permanently in allPlatformRides for both rider and driver sides
+    setAllPlatformRides((prev) => {
+      const filtered = prev.filter((r) => r.id !== newRide.id);
+      const next = [newRide, ...filtered];
+      try { localStorage.setItem('wadaage_all_rides_history', JSON.stringify(next.slice(0, 150))); } catch (_e) {}
+      return next;
+    });
+
     // Save to Firestore and broadcast instantly across all open tabs / driver devices
     saveRideToFirestore(newRide);
     syncRideToHostinger(newRide);
@@ -3571,25 +3609,39 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('wadaage_current_ride');
       } catch (_e) {}
 
+      setAllPlatformRides((prev) => {
+        const filtered = prev.filter((r) => r.id !== cancelledRide.id);
+        const next = [cancelledRide, ...filtered];
+        try { localStorage.setItem('wadaage_all_rides_history', JSON.stringify(next.slice(0, 150))); } catch (_e) {}
+        return next;
+      });
+
       saveRideToFirestore(cancelledRide);
       syncRideToHostinger(cancelledRide);
       broadcastRideEvent('RIDE_CANCELLED', cancelledRide);
     }
   };
 
-  // Register a Real Rider (with WhatsApp phone verification)
-  const registerRider = (userData: { name: string; phone: string; email?: string }): AuthUser => {
+  // Register a Real Rider (with WhatsApp phone verification and password)
+  const registerRider = (userData: { name: string; phone: string; email?: string; password?: string }): AuthUser => {
     const cleanDigits = userData.phone.replace(/\D/g, '');
     const regUsers = secureStorage.getItem<AuthUser[]>('wadaage_registered_users', []) || [];
     const existing = regUsers.find((u) => u.role === 'passenger' && u.phone && u.phone.replace(/\D/g, '') === cleanDigits);
 
+    const riderPassword = userData.password?.trim() || existing?.password || '';
+
     const newUser: AuthUser = existing
-      ? { ...existing, name: userData.name.trim() || existing.name }
+      ? {
+          ...existing,
+          name: userData.name.trim() || existing.name,
+          password: riderPassword || existing.password,
+        }
       : {
           id: `usr_${Date.now()}`,
           name: userData.name.trim(),
           email: userData.email || `${cleanDigits}@wadaage.com`,
           phone: userData.phone,
+          password: riderPassword,
           role: 'passenger',
           avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         };
@@ -3629,7 +3681,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const records = safeJsonParse(recordsStr, []);
       const recIdx = records.findIndex((r: any) => r.phone === userData.phone || r.id === newUser.id);
       if (recIdx >= 0) {
-        records[recIdx] = { ...records[recIdx], name: newUser.name };
+        records[recIdx] = { ...records[recIdx], name: newUser.name, password: riderPassword };
       } else {
         records.unshift({
           id: newUser.id,
@@ -3637,6 +3689,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: 'Passenger',
           email: newUser.email,
           phone: newUser.phone,
+          password: riderPassword,
           rating: 5.0,
           trips: 0,
           status: 'Active',
@@ -3660,6 +3713,94 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newUser;
   };
 
+  // Dedicated function to update user password smoothly from Admin or Settings
+  const updateUserPassword = async (userIdOrPhone: string, newPassword: string): Promise<boolean> => {
+    const cleanPass = newPassword.trim();
+    if (!cleanPass) return false;
+    const cleanDigits = userIdOrPhone.replace(/\D/g, '');
+
+    try {
+      // 1. Update wadaage_registered_users
+      const regUsers = secureStorage.getItem<AuthUser[]>('wadaage_registered_users', []) || [];
+      let updatedUser: AuthUser | null = null;
+      const updatedRegUsers = regUsers.map((u) => {
+        const uDigits = u.phone ? u.phone.replace(/\D/g, '') : '';
+        if (u.id === userIdOrPhone || (cleanDigits && uDigits.endsWith(cleanDigits))) {
+          const mod = { ...u, password: cleanPass };
+          updatedUser = mod;
+          return mod;
+        }
+        return u;
+      });
+      secureStorage.setItem('wadaage_registered_users', updatedRegUsers);
+      localStorage.setItem('wadaage_registered_users', JSON.stringify(updatedRegUsers));
+
+      // 2. Update custom drivers
+      const customDrivers = secureStorage.getItem<Driver[]>('wadaage_custom_drivers', []) || [];
+      const updatedDrivers = customDrivers.map((d) => {
+        const dDigits = d.phone ? d.phone.replace(/\D/g, '') : '';
+        if (d.id === userIdOrPhone || (cleanDigits && dDigits.endsWith(cleanDigits))) {
+          return { ...d, password: cleanPass };
+        }
+        return d;
+      });
+      secureStorage.setItem('wadaage_custom_drivers', updatedDrivers);
+      localStorage.setItem('wadaage_custom_drivers', JSON.stringify(updatedDrivers));
+
+      // 3. Update state drivers
+      setDrivers((prev) =>
+        prev.map((d) => {
+          const dDigits = d.phone ? d.phone.replace(/\D/g, '') : '';
+          if (d.id === userIdOrPhone || (cleanDigits && dDigits.endsWith(cleanDigits))) {
+            return { ...d, password: cleanPass };
+          }
+          return d;
+        })
+      );
+
+      // 4. Update driver applications
+      setDriverApplications((prev) =>
+        prev.map((a) => {
+          const aDigits = a.phone ? a.phone.replace(/\D/g, '') : '';
+          if (a.id === userIdOrPhone || (cleanDigits && aDigits.endsWith(cleanDigits))) {
+            return { ...a, password: cleanPass };
+          }
+          return a;
+        })
+      );
+
+      // 5. Update user management records
+      const recordsStr = localStorage.getItem('wadaage_user_management_records');
+      const records = safeJsonParse(recordsStr, []);
+      const updatedRecords = records.map((r: any) => {
+        const rDigits = r.phone ? String(r.phone).replace(/\D/g, '') : '';
+        if (r.id === userIdOrPhone || (cleanDigits && rDigits.endsWith(cleanDigits))) {
+          return { ...r, password: cleanPass };
+        }
+        return r;
+      });
+      localStorage.setItem('wadaage_user_management_records', JSON.stringify(updatedRecords));
+
+      // 6. Backend API sync
+      fetch(getApiUrl(`/api/admin/users/${encodeURIComponent(userIdOrPhone)}/password`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: cleanPass }),
+      }).catch(() => {});
+
+      // 7. Firestore sync
+      if (updatedUser) {
+        updateUserInFirestore({ id: (updatedUser as AuthUser).id, password: cleanPass }).catch(() => {});
+      } else {
+        updateUserInFirestore({ id: userIdOrPhone, password: cleanPass }).catch(() => {});
+      }
+
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  };
+
   // Register a Real Driver (saved with pending verification for Admin review)
   const registerDriver = (driverData: {
     name: string;
@@ -3672,7 +3813,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     autoApprove?: boolean;
   }): { driver: Driver; user: AuthUser; application: DriverApplication } => {
     const cleanPhone = driverData.phone.replace(/\D/g, '');
-    const isAutoApproved = !!driverData.autoApprove;
+    const isAutoApproved = driverData.autoApprove !== undefined ? !!driverData.autoApprove : true;
     const generateUniquePassword = () => {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
       let res = 'Wad#';
@@ -3701,10 +3842,10 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('wadaage_driver_trip_history');
     } catch {}
 
-    // Initialize fresh wallet balance for new driver
+    // Initialize fresh wallet balance with welcome credit for new driver
     setDriverWallets((prev) => ({
       ...prev,
-      [newDriverUser.id]: isAutoApproved ? 0.50 : 0.00,
+      [newDriverUser.id]: 15.00,
     }));
 
     const newDriver: Driver = {
@@ -4651,6 +4792,12 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         optimalWaypointsSequence: updatedWaypoints || currentRide.optimalWaypointsSequence,
       };
       setCurrentRide(completedRide);
+      setAllPlatformRides((prev) => {
+        const filtered = prev.filter((r) => r.id !== completedRide.id);
+        const next = [completedRide, ...filtered];
+        try { localStorage.setItem('wadaage_all_rides_history', JSON.stringify(next.slice(0, 150))); } catch (_e) {}
+        return next;
+      });
       saveRideToFirestore(completedRide);
       syncRideToHostinger(completedRide);
       broadcastRideEvent('RIDE_STATUS_UPDATED', completedRide);
@@ -4666,6 +4813,12 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       completedAt: new Date().toLocaleTimeString(),
     };
     setCurrentRide(completedRide);
+    setAllPlatformRides((prev) => {
+      const filtered = prev.filter((r) => r.id !== completedRide.id);
+      const next = [completedRide, ...filtered];
+      try { localStorage.setItem('wadaage_all_rides_history', JSON.stringify(next.slice(0, 150))); } catch (_e) {}
+      return next;
+    });
     saveRideToFirestore(completedRide);
     syncRideToHostinger(completedRide);
     broadcastRideEvent('RIDE_STATUS_UPDATED', completedRide);
@@ -5252,6 +5405,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isOrderWithinDriverDispatchRadius,
         validateWadaageMatch,
         registerRider,
+        updateUserPassword,
         registerDriver,
         driverApplications,
         submitDriverApplication,
@@ -5264,6 +5418,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         rejectVoiceCall,
         isCallModalOpen,
         setIsCallModalOpen,
+        updateDriverLiveCoordinates,
       }}
     >
       {children}

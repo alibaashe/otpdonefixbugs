@@ -76,6 +76,22 @@ function Check-Prerequisites {
 
     # 3. Check Java JDK
     $javaFound = $false
+    if (-not $env:JAVA_HOME) {
+        $commonJbrPaths = @(
+            "C:\Program Files\Android\Android Studio\jbr",
+            "C:\Program Files\Android\Android Studio\jre",
+            "$env:LOCALAPPDATA\Programs\Android Studio\jbr"
+        )
+        foreach ($jpath in $commonJbrPaths) {
+            if (Test-Path "$jpath\bin\java.exe") {
+                $env:JAVA_HOME = $jpath
+                $javaFound = $true
+                Write-Step "OK" "Java JDK auto-configured from Android Studio: $env:JAVA_HOME"
+                break
+            }
+        }
+    }
+
     if ($env:JAVA_HOME -and (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
         $javaFound = $true
         Write-Step "OK" "Java JDK found at: $env:JAVA_HOME"
@@ -132,14 +148,23 @@ function Build-Rider-Apk {
     Write-Step "4/6" "Synchronizing Android assets for Rider..."
     $androidDir = if (Test-Path "$PSScriptRoot\android-rider") { "$PSScriptRoot\android-rider" } else { "$PSScriptRoot\android" }
 
+    # Auto-generate local.properties if missing
+    $localProp = "$androidDir\local.properties"
+    if (-not (Test-Path $localProp) -and $env:ANDROID_HOME) {
+        $sdkDirClean = $env:ANDROID_HOME -replace '\\', '\\'
+        Set-Content -Path $localProp -Value "sdk.dir=$sdkDirClean" -Force
+        Write-Step "OK" "Configured $localProp"
+    }
+
     # Sync web assets to capacitor directory
     Copy-Item "$PSScriptRoot\android-rider\*" "$PSScriptRoot\android" -Recurse -Force -ErrorAction SilentlyContinue
     npx cap sync android
 
     # Copy updated assets to android-rider
-    if (Test-Path "$PSScriptRoot\android-rider") {
-        Copy-Item "$PSScriptRoot\dist\*" "$PSScriptRoot\android-rider\app\src\main\assets\public" -Recurse -Force
-    }
+    $riderAssetsPublic = "$androidDir\app\src\main\assets\public"
+    if (-not (Test-Path $riderAssetsPublic)) { New-Item -ItemType Directory -Path $riderAssetsPublic -Force | Out-Null }
+    Copy-Item "$PSScriptRoot\dist\*" $riderAssetsPublic -Recurse -Force
+    Copy-Item "$PSScriptRoot\capacitor-rider.config.json" "$androidDir\app\src\main\assets\capacitor.config.json" -Force -ErrorAction SilentlyContinue
 
     # 5. Build with Gradle
     Write-Step "5/6" "Building Rider APK with Gradle..."
@@ -209,14 +234,23 @@ function Build-Driver-Apk {
     Write-Step "4/6" "Synchronizing Android assets for Driver..."
     $androidDir = if (Test-Path "$PSScriptRoot\android-driver") { "$PSScriptRoot\android-driver" } else { "$PSScriptRoot\android" }
 
+    # Auto-generate local.properties if missing
+    $localProp = "$androidDir\local.properties"
+    if (-not (Test-Path $localProp) -and $env:ANDROID_HOME) {
+        $sdkDirClean = $env:ANDROID_HOME -replace '\\', '\\'
+        Set-Content -Path $localProp -Value "sdk.dir=$sdkDirClean" -Force
+        Write-Step "OK" "Configured $localProp"
+    }
+
     # Sync web assets to capacitor directory
     Copy-Item "$PSScriptRoot\android-driver\*" "$PSScriptRoot\android" -Recurse -Force -ErrorAction SilentlyContinue
     npx cap sync android
 
     # Copy updated assets to android-driver
-    if (Test-Path "$PSScriptRoot\android-driver") {
-        Copy-Item "$PSScriptRoot\dist\*" "$PSScriptRoot\android-driver\app\src\main\assets\public" -Recurse -Force
-    }
+    $driverAssetsPublic = "$androidDir\app\src\main\assets\public"
+    if (-not (Test-Path $driverAssetsPublic)) { New-Item -ItemType Directory -Path $driverAssetsPublic -Force | Out-Null }
+    Copy-Item "$PSScriptRoot\dist\*" $driverAssetsPublic -Recurse -Force
+    Copy-Item "$PSScriptRoot\capacitor-driver.config.json" "$androidDir\app\src\main\assets\capacitor.config.json" -Force -ErrorAction SilentlyContinue
 
     # 5. Build with Gradle
     Write-Step "5/6" "Building Driver APK with Gradle..."

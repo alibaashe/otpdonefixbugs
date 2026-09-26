@@ -1,10 +1,10 @@
 import { Calendar, CheckCircle2, Clock, Filter, MapPin, Navigation, Search, Star, Users, XCircle } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRide } from '../../context/RideContext';
 import { formatCurrency } from '../../utils/geo';
 
 export const DriverActivityView: React.FC = () => {
-  const { drivers, currentUser } = useRide();
+  const { drivers, currentUser, allPlatformRides } = useRide();
   const driver = drivers.find((d) => d.phone === currentUser?.phone || d.id === currentUser?.id) || drivers[0] || {
     id: currentUser?.id || 'drv_live',
     name: currentUser?.name || 'Driver Partner',
@@ -21,7 +21,56 @@ export const DriverActivityView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'cancelled' | 'shared'>('all');
 
-  const activityRides = [
+  const driverPhoneClean = (currentUser?.phone || '').replace(/\D/g, '');
+  const driverId = currentUser?.id;
+
+  const realRides = useMemo(() => {
+    const list = [...(allPlatformRides || [])];
+    const myRides = list.filter((r) => {
+      const rDriverPhone = (r.driverPhone || '').replace(/\D/g, '');
+      return (
+        (driverId && r.assignedDriverId === driverId) ||
+        (driverPhoneClean && rDriverPhone && rDriverPhone.endsWith(driverPhoneClean)) ||
+        r.status === 'completed' ||
+        r.status === 'cancelled'
+      );
+    });
+
+    if (myRides.length === 0) {
+      return fallbackRides;
+    }
+
+    return myRides.map((r, idx) => {
+      let dateFormatted = 'Maanta • Recent';
+      try {
+        if (r.completedAt) {
+          dateFormatted = new Date(r.completedAt).toLocaleString();
+        } else if (r.createdAt) {
+          dateFormatted = new Date(r.createdAt).toLocaleString();
+        }
+      } catch {}
+
+      return {
+        id: r.id || `ride_${100 + idx}`,
+        passengerName: r.passengerName || 'Rakaab Wadaage',
+        passengerPhone: r.passengerPhone || '63 4889922',
+        pickup: r.pickup?.name ? `${r.pickup.name} (${r.pickup.address})` : r.pickup?.address || 'Hargeisa Central',
+        dropoff: r.dropoff?.name ? `${r.dropoff.name} (${r.dropoff.address})` : r.dropoff?.address || 'Hargeisa Destination',
+        date: dateFormatted,
+        fare: r.totalFare || 2.50,
+        net: Math.max(0, (r.totalFare || 2.50) - 0.10),
+        type: r.categoryName || (r.category === 'wadaage_share' ? 'WadaageShare' : 'WadaageTaxi'),
+        status: r.status === 'cancelled' ? 'cancelled' : 'completed',
+        distanceKm: r.distanceKm || 4.5,
+        rating: 5,
+        isShared: r.category === 'wadaage_share' || Boolean(r.isShared) || Boolean(r.coPassenger),
+        coPassenger: r.coPassenger?.name || (r.coPassenger as any)?.passengerName,
+        cancellationReason: r.cancellationReason,
+      };
+    });
+  }, [allPlatformRides, driverId, driverPhoneClean]);
+
+  const fallbackRides = [
     {
       id: 'ride_101',
       passengerName: 'Amina Mohamed',
@@ -101,7 +150,7 @@ export const DriverActivityView: React.FC = () => {
     },
   ];
 
-  const filteredRides = activityRides.filter((ride) => {
+  const filteredRides = realRides.filter((ride) => {
     const matchesSearch =
       ride.passengerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ride.pickup.toLowerCase().includes(searchQuery.toLowerCase()) ||

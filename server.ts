@@ -499,6 +499,7 @@ Return ONLY valid JSON matching this schema:
       sahal_number: req.body.sahal_number || '',
       rating: req.body.rating ? Number(req.body.rating) : (existingUser?.rating ?? 5.0),
       total_trips: req.body.total_trips ? Number(req.body.total_trips) : (existingUser?.total_trips ?? 0),
+      password: req.body.password || (existingUser as any)?.password || '',
       created_at: existingUser?.created_at || req.body.created_at || req.body.registeredAt || new Date().toISOString(),
     };
 
@@ -559,6 +560,68 @@ Return ONLY valid JSON matching this schema:
       return res.json({ success: true, message: 'User removed from database' });
     }
     return res.status(404).json({ success: false, error: 'User not found' });
+  });
+
+  // Dedicated Password Update Endpoint (for Admin & User password changes)
+  app.post(['/api/admin/users/:id/password', '/api/users/:id/password'], (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ success: false, error: 'Password is required' });
+    }
+    const cleanPassword = password.trim();
+    const cleanId = String(id).replace(/\D/g, '');
+
+    // 1. Update in users store
+    const user = dbService.store.users.find(
+      (u) => u.id === id || (cleanId && u.phone && u.phone.replace(/\D/g, '').endsWith(cleanId))
+    );
+    if (user) {
+      (user as any).password = cleanPassword;
+      (user as any).updated_at = new Date().toISOString();
+      dbService.syncUserToMySQL(user).catch(() => {});
+    }
+
+    // 2. Update in drivers store
+    const driver = dbService.store.drivers.find(
+      (d) => d.id === id || (cleanId && d.phone && d.phone.replace(/\D/g, '').endsWith(cleanId))
+    );
+    if (driver) {
+      (driver as any).password = cleanPassword;
+      (driver as any).updated_at = new Date().toISOString();
+    }
+
+    // 3. Update in driver applications store
+    const driverApps = (dbService.store as any).driver_applications || (dbService.store as any).driverApplications;
+    if (Array.isArray(driverApps)) {
+      const app = driverApps.find(
+        (a: any) => a.id === id || (cleanId && a.phone && String(a.phone).replace(/\D/g, '').endsWith(cleanId))
+      );
+      if (app) {
+        (app as any).password = cleanPassword;
+      }
+    }
+
+    // Broadcast PASSWORD_UPDATED event
+    const ssePayload = `data: ${JSON.stringify({
+      type: 'PASSWORD_UPDATED',
+      userId: id,
+      password: cleanPassword,
+      timestamp: Date.now(),
+    })}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(ssePayload);
+      } catch (_e) {
+        sseClients.delete(client);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Password updated successfully across all records',
+      userId: id,
+    });
   });
 
   // Database CRUD - Drivers
