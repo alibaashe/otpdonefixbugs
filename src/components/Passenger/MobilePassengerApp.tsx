@@ -705,30 +705,27 @@ export const MobilePassengerApp: React.FC = () => {
                   type="button"
                   disabled={isBooking}
                   onClick={handleBookSelected}
-                  className="w-full py-2.5 px-4 rounded-xl bg-[#008751] hover:bg-[#007345] active:bg-[#006038] active:scale-[0.98] text-white font-black text-sm tracking-wide shadow-md flex items-center justify-center space-x-2 transition cursor-pointer touch-manipulation select-none"
+                  className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#008751] via-emerald-600 to-[#006038] hover:opacity-95 active:scale-[0.98] text-white font-black text-base tracking-wide shadow-xl shadow-emerald-600/30 flex items-center justify-center space-x-3 transition cursor-pointer touch-manipulation select-none border border-emerald-400/30"
                 >
                   {isBooking ? (
                     <span className="flex items-center space-x-2">
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       <span>{language === 'so' ? 'Waa la dalbayaa...' : 'Booking...'}</span>
                     </span>
                   ) : (
-                    <>
+                    <span className="flex items-center space-x-2">
+                      <span className="text-lg">🚗</span>
                       <span>
                         {orderTiming === 'advance'
                           ? (language === 'so'
                               ? `Xaqiiji Dalabka Hore (${new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
                               : `Confirm Advance Order (${new Date(Date.now() + advanceMinutes * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`)
                           : (language === 'so'
-                              ? `Dalbo ${selectedCategory === 'wadaage_share' ? 'Wadaage' : 'Taksi'}`
-                              : `Book ${selectedCategory === 'wadaage_share' ? 'Wadaage' : 'Taxi'}`)}
+                              ? `DALBO HADDA (BOOK RIDE)`
+                              : `DALBO HADDA (BOOK RIDE)`)}
                       </span>
-                      <div className="text-right ml-2">
-                        <span className="bg-white/20 px-2 py-0.5 rounded text-[11px] font-black block">
-                          {Math.round(currentFare.finalFare * EXCHANGE_RATE_USD_TO_SLSH).toLocaleString()} SLSH (${currentFare.finalFare.toFixed(2)})
-                        </span>
-                      </div>
-                    </>
+                      <span className="text-lg">➔</span>
+                    </span>
                   )}
                 </button>
               </div>

@@ -874,27 +874,24 @@ export const RideBookingCard: React.FC<RideBookingCardProps> = ({
             );
             setTimeout(() => setIsSubmitting(false), 2500);
           }}
-          className={`w-full font-black text-base py-4 px-4 rounded-2xl shadow-xl transition-all flex items-center justify-between uppercase tracking-wider ${
+          className={`w-full font-black text-base py-4 px-6 rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-3 uppercase tracking-wider ${
             isSubmitting
               ? 'bg-slate-400 cursor-not-allowed text-slate-700 opacity-80'
-              : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-emerald-500/25 active:scale-[0.98]'
+              : 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-emerald-500/30 active:scale-[0.98] border border-emerald-400/40'
           }`}
         >
-          <div className="flex items-center space-x-2">
-            {isSubmitting ? (
-              <span className="flex items-center space-x-2">
-                <span className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
-                <span>DALBANAYAA... (REQUESTING...)</span>
-              </span>
-            ) : (
-              <span>{isBookByBid ? 'REQUEST DRIVER BIDS NOW' : 'DALBO HADDA (BOOK RIDE NOW)'}</span>
-            )}
-          </div>
-          <div className="flex items-center space-x-2 bg-slate-950/20 px-3 py-1 rounded-xl">
-            <span className="text-lg font-black text-slate-950">
-              {formatCurrency(targetBidPrice || estimatedTotal)}
+          {isSubmitting ? (
+            <span className="flex items-center space-x-2">
+              <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span>DALBANAYAA... (REQUESTING...)</span>
             </span>
-          </div>
+          ) : (
+            <span className="flex items-center space-x-3">
+              <span className="text-xl">🚗</span>
+              <span>{isBookByBid ? 'REQUEST DRIVER BIDS NOW' : 'DALBO HADDA (BOOK RIDE NOW)'}</span>
+              <span className="text-xl">➔</span>
+            </span>
+          )}
         </button>
         <p className="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center space-x-1">
           <Shield className="w-3 h-3 text-emerald-500" />
