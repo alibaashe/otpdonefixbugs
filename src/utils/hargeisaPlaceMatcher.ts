@@ -52,7 +52,12 @@ export function findCanonicalHargeisaPlace(
   placeId?: string
 ): HargeisaPlace | null {
   if (placeId) {
-    const byId = HARGEISA_PLACES.find((p) => p.id === placeId);
+    const byId = HARGEISA_PLACES.find(
+      (p) =>
+        p.id === placeId ||
+        (placeId.includes('imperial') && (p.name.toLowerCase().includes('imperial') || p.id === 'osm_1138799309')) ||
+        (placeId.includes('naxar') && (p.id === 'ina_naxar_street' || p.name.toLowerCase().includes('naxar')))
+    );
     if (byId) return byId;
   }
 
@@ -60,6 +65,24 @@ export function findCanonicalHargeisaPlace(
 
   const clean = normalizePlaceText(nameOrQuery);
   if (!clean) return null;
+
+  // Direct fast-path for key landmark queries
+  if (clean.includes('naxar')) {
+    const naxar = HARGEISA_PLACES.find((p) => p.id === 'ina_naxar_street' || p.name.toLowerCase().includes('naxar'));
+    if (naxar) return naxar;
+  }
+  if (clean.includes('imperial')) {
+    const imperial = HARGEISA_PLACES.find((p) => p.name.toLowerCase().includes('imperial') || p.id === 'osm_1138799309');
+    if (imperial) return imperial;
+  }
+  if (clean.includes('berbera') && (clean.includes('bus') || clean.includes('terminal') || clean.includes('istaan'))) {
+    const berbera = HARGEISA_PLACES.find((p) => p.id === 'berbera_bus_terminal');
+    if (berbera) return berbera;
+  }
+  if (clean.includes('airport') || clean.includes('garoonka') || clean.includes('cigaal')) {
+    const airport = HARGEISA_PLACES.find((p) => p.id === 'hga_airport' || p.name.toLowerCase().includes('airport'));
+    if (airport) return airport;
+  }
 
   // 1. Exact name match
   const exactMatch = HARGEISA_PLACES.find(

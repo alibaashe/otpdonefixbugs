@@ -114,7 +114,7 @@ export const MobilePassengerApp: React.FC = () => {
 
   // Favorite Saved Places for 1-click booking
   const [favoritePlaces] = useState([
-    { id: 'fav-1', name: 'Guriga (Home)', address: 'Ina Naxar Street, Hargeisa', lat: 9.5320, lng: 44.0710 },
+    { id: 'fav-1', name: 'Guriga (Home)', address: 'Ina Naxar Street, Hargeisa', lat: 9.5605, lng: 44.0750 },
     { id: 'fav-2', name: 'Shaqada (Work / Office)', address: 'Dahabshiil Business Center, Downtown', lat: 9.5615, lng: 44.0660 },
     { id: 'fav-3', name: 'Egal International Airport (HGA)', address: 'Airport Road, South Hargeisa', lat: 9.5181, lng: 44.0888 },
     { id: 'fav-4', name: 'Berbera Bus Terminal (Istaanka Berbera)', address: 'East Highway, 26 June District, Hargeisa', lat: 9.5680, lng: 44.0850 },
@@ -145,24 +145,17 @@ export const MobilePassengerApp: React.FC = () => {
   const durationMins = roadDurationMins || calculateDurationMins(distanceKm);
   const currentFare = computeFare(selectedCategory, distanceKm, durationMins, pricing);
 
-  // Fares formatted for Somaliland Shillings (matching 33,000 SLSH & 54,000 SLSH for standard route)
+  // Real fares formatted for Somaliland Shillings (9,000 SLSH 1st km + 4,000 SLSH/km for Share; 12,000 SLSH 1st km + 7,000 SLSH/km for Taxi)
   const wadaageFare = computeFare('wadaage_share', distanceKm, durationMins, pricing);
   const taxiFare = computeFare('wadaage_taxi', distanceKm, durationMins, pricing);
 
-  const formatSlshRound = (usdFare: number, fallbackSlsh: number) => {
+  const formatSlshAmount = (usdFare: number) => {
     const rawSlsh = Math.round(usdFare * EXCHANGE_RATE_USD_TO_SLSH);
-    if (!rawSlsh || isNaN(rawSlsh)) return `${fallbackSlsh.toLocaleString()} SLSH`;
-    // Round to nearest 500 or 1,000
-    const rounded = Math.round(rawSlsh / 500) * 500;
-    return `${rounded.toLocaleString()} SLSH`;
+    return `${rawSlsh.toLocaleString()} SLSH`;
   };
 
-  const isDefaultScreenshotRoute =
-    (pickupLocation?.name?.toLowerCase().includes('naxar') || pickupLocation?.id === 'ina_naxar_street') &&
-    (dropoffLocation?.name?.toLowerCase().includes('berbera') || dropoffLocation?.id === 'berbera_bus_terminal');
-
-  const wadaageFareFormatted = isDefaultScreenshotRoute ? '33,000 SLSH' : formatSlshRound(wadaageFare.finalFare, 33000);
-  const taxiFareFormatted = isDefaultScreenshotRoute ? '54,000 SLSH' : formatSlshRound(taxiFare.finalFare, 54000);
+  const wadaageFareFormatted = `${formatSlshAmount(wadaageFare.finalFare)}`;
+  const taxiFareFormatted = `${formatSlshAmount(taxiFare.finalFare)}`;
 
   // Vehicle Option Data
   const vehicleOptions = [
@@ -264,8 +257,8 @@ export const MobilePassengerApp: React.FC = () => {
     const categoryMap: Record<string, string> = {
       'Hotels': 'Hotel',
       'Hospitals': 'Hospital',
-      'Banks': 'Financial',
-      'Malls': 'Commercial',
+      'Banks': 'Bank',
+      'Malls': 'Market',
       'Universities': 'Education',
       'Transit': 'Transit',
     };
@@ -927,7 +920,7 @@ export const MobilePassengerApp: React.FC = () => {
             {/* Quick action grid */}
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                { id: 'fav_home', label: 'Hoyga (Home)', icon: 'home', name: 'Ina Naxar Street, Hargeisa', address: 'Ina Naxar', lat: 9.5320, lng: 44.0710 },
+                { id: 'fav_home', label: 'Hoyga (Home)', icon: 'home', name: 'Ina Naxar Street, Hargeisa', address: 'Ina Naxar', lat: 9.5605, lng: 44.0750 },
                 { id: 'fav_work', label: 'Shaqada (Work)', icon: 'briefcase', name: 'Dahabshiil Business Center', address: '26 June', lat: 9.5615, lng: 44.0660 },
                 { id: 'fav_uni', label: 'Jaamacadda', icon: 'graduation-cap', name: 'University of Hargeisa', address: 'Maxamuud Haybe', lat: 9.5512, lng: 44.0585 },
                 { id: 'fav_airport', label: 'Madaarka Hargeysa', icon: 'plane', name: 'Egal International Airport', address: 'Airport Rd', lat: 9.5181, lng: 44.0888 },

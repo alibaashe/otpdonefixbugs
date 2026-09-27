@@ -5,15 +5,20 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { dbService } from './server/db';
 
-// Master Database of 1,650 Hargeisa Location Coordinates
+// Master Database of Authoritative Real Hargeisa Coordinates
 let hargeisaMasterLocations: any[] = [];
 try {
+  const jsonPathPublic = path.resolve(process.cwd(), 'public/hargeisa_locations.json');
   const jsonPath1650 = path.resolve(process.cwd(), 'public/hargeisa_locations_1650.json');
-  const jsonPath1550 = path.resolve(process.cwd(), 'public/hargeisa_locations_1550.json');
-  const targetPath = fs.existsSync(jsonPath1650) ? jsonPath1650 : jsonPath1550;
+  const jsonPathOsm = path.resolve(process.cwd(), 'osm_hargeisa_places.json');
+  const targetPath = fs.existsSync(jsonPathPublic)
+    ? jsonPathPublic
+    : fs.existsSync(jsonPath1650)
+    ? jsonPath1650
+    : jsonPathOsm;
   if (fs.existsSync(targetPath)) {
     hargeisaMasterLocations = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
-    console.log(`[Master DB] Loaded ${hargeisaMasterLocations.length} Hargeisa coordinates.`);
+    console.log(`[Master DB] Loaded ${hargeisaMasterLocations.length} real Hargeisa coordinates.`);
   }
 } catch (e) {
   console.warn('[Master DB] Notice: Master DB will load on demand.');

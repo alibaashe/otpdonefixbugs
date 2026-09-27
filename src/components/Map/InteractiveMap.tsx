@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapLibreInteractiveMap } from './MapLibreInteractiveMap';
+import { GoogleInteractiveMap } from './GoogleInteractiveMap';
 
 interface InteractiveMapProps {
   showSurgeHeatmap?: boolean;
@@ -9,5 +9,5 @@ interface InteractiveMapProps {
 }
 
 export const InteractiveMap: React.FC<InteractiveMapProps> = (props) => {
-  return <MapLibreInteractiveMap {...props} />;
+  return <GoogleInteractiveMap {...props} />;
 };

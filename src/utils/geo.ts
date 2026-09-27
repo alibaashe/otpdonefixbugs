@@ -894,6 +894,30 @@ export function formatPriceDual(amountUsd: number): { slsh: string; usd: string 
  * 2. Pickup B -> Dropoff A -> Dropoff B
  * Enforces a strict maximum 10-minute detour SLA for Passenger A.
  */
+export function getClosestHargeisaPopularRoad(lat: number, lng: number): string {
+  // Road 1: Jigjiga Yar / North-East corridor (lat >= 9.565, lng >= 44.070)
+  if (lat >= 9.565 && lng >= 44.070) {
+    return 'Road 1 (Jigjiga-Yar Road)';
+  }
+  // Road 2: Wadada Wadnaha / Central commercial corridor (lat 9.552-9.570, lng 44.048-44.085)
+  if (lat >= 9.552 && lat <= 9.570 && lng >= 44.048 && lng <= 44.085) {
+    return 'Road 2 (Wadada Wadnaha)';
+  }
+  // Airport Road (lat < 9.550, lng >= 44.070)
+  if (lat < 9.550 && lng >= 44.070) {
+    return 'Airport Road (Wadada Garoonka)';
+  }
+  // Independence Ave (lat 9.555-9.565, lng 44.055-44.070)
+  if (lat >= 9.555 && lat <= 9.565 && lng >= 44.055 && lng <= 44.070) {
+    return 'Independence Ave (Wadada Xorriyadda)';
+  }
+  // 150 Ring Road (north or south outskirts)
+  if (lat > 9.575 || lat < 9.535) {
+    return '150 Ring Road (Wadada 150-ka)';
+  }
+  return 'Road 2 (Wadada Wadnaha Arterial)';
+}
+
 export function findNearestHargeisaPlace(lat: number, lng: number): {
   id: string;
   name: string;
@@ -902,11 +926,13 @@ export function findNearestHargeisaPlace(lat: number, lng: number): {
   lng: number;
   distanceKm: number;
 } {
+  const popularRoad = getClosestHargeisaPopularRoad(lat, lng);
+
   if (!HARGEISA_PLACES || HARGEISA_PLACES.length === 0) {
     return {
       id: `pin_${Date.now()}`,
-      name: `Hargeisa (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-      address: `Wadada Hargeysa (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
+      name: `${popularRoad}`,
+      address: `${popularRoad}, Hargeisa (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
       lat,
       lng,
       distanceKm: 0,
@@ -924,35 +950,35 @@ export function findNearestHargeisaPlace(lat: number, lng: number): {
     }
   }
 
-  // If within 350 meters of a known landmark, use the exact landmark name
+  // If within 350 meters of a known landmark, use the exact landmark name with popular road
   if (minDistance < 0.35) {
     return {
       id: closest.id,
       name: closest.name,
-      address: closest.address || `${closest.district || 'Hargeisa'}, Somaliland`,
+      address: closest.address || `${popularRoad}, ${closest.district || 'Hargeisa'}, Somaliland`,
       lat,
       lng,
       distanceKm: minDistance,
     };
   }
 
-  // If within 900 meters, note "Near <Landmark>"
+  // If within 900 meters, note "Near <Landmark> on <Popular Road>"
   if (minDistance < 0.9) {
     return {
       id: `near_${closest.id}_${Date.now()}`,
-      name: `Near ${closest.name}`,
-      address: `${closest.district || 'Hargeisa'}, Somaliland (${Math.round(minDistance * 1000)}m from ${closest.name})`,
+      name: `Near ${closest.name} (${popularRoad})`,
+      address: `${popularRoad}, ${closest.district || 'Hargeisa'}, Somaliland`,
       lat,
       lng,
       distanceKm: minDistance,
     };
   }
 
-  // Clean formatted GPS coordinate pin
+  // Clean formatted GPS coordinate pin along closest popular road
   return {
     id: `pin_${Date.now()}`,
-    name: `Hargeisa Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-    address: `Wadada Hargeysa (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
+    name: `${popularRoad}`,
+    address: `${popularRoad}, Hargeisa (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
     lat,
     lng,
     distanceKm: minDistance,

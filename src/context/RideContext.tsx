@@ -605,10 +605,10 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const defaultPickup: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('ina naxar') || p.id.includes('naxar')) || {
     id: 'ina_naxar_street',
-    name: 'Ina Naxar Street, Hargeisa',
-    address: 'Ina Naxar Street, 26 June District, Hargeisa',
-    lat: 9.5320,
-    lng: 44.0710,
+    name: 'Ina Naxar street',
+    address: 'Ina Naxar Street, Road 1 & Road 2 Corridor, 26 June District, Hargeisa',
+    lat: 9.5605,
+    lng: 44.0750,
   };
   const defaultDropoff: LocationNode = CITY_LOCATIONS.find((p) => p.name.toLowerCase().includes('berbera') || p.id.includes('berbera')) || {
     id: 'berbera_bus_terminal',

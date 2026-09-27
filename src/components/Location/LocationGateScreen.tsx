@@ -220,7 +220,7 @@ export const LocationGateScreen: React.FC<LocationGateScreenProps> = ({ onLocati
               <div className="text-[11px] font-bold text-[#00E575] text-left">
                 Dooro Xaafaddaada / Goobtaada Hargeisa:
               </div>
-              {HARGEISA_PLACES.filter((p) => p.category === 'District & Neighborhood').slice(0, 10).map((place) => (
+              {HARGEISA_PLACES.filter((p) => p.category === 'District & Neighborhood' || p.category.includes('District') || p.category.includes('Xaafad')).map((place) => (
                 <button
                   key={place.id}
                   type="button"

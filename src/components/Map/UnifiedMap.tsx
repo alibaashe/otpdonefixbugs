@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapLibreInteractiveMap } from './MapLibreInteractiveMap';
+import { GoogleInteractiveMap } from './GoogleInteractiveMap';
 
 interface UnifiedMapProps {
   showSurgeHeatmap?: boolean;
@@ -14,7 +14,7 @@ export const UnifiedMap: React.FC<UnifiedMapProps> = ({
 }) => {
   return (
     <div className="w-full h-full relative">
-      <MapLibreInteractiveMap
+      <GoogleInteractiveMap
         showSurgeHeatmap={showSurgeHeatmap}
         selectableMode={selectableMode}
         height={height}

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useRide } from '../../context/RideContext';
 import { CITY_LOCATIONS } from '../../data/mockData';
+import { findNearestHargeisaPlace } from '../../utils/geo';
 import { LeafletInteractiveMap } from './LeafletInteractiveMap';
 import { MapLibreInteractiveMap } from './MapLibreInteractiveMap';
 
@@ -447,31 +448,12 @@ const GoogleMapRenderer: React.FC<GoogleInteractiveMapProps> = ({
   }, [assignedDriver?.id, isDriverEnRoute, pickupLocation?.lat, pickupLocation?.lng, dropoffLocation?.lat, dropoffLocation?.lng, currentRide?.status]);
 
   const handleSetLocation = useCallback((type: 'pickup' | 'dropoff', lat: number, lng: number) => {
-    let minDistance = Infinity;
-    let nearest = CITY_LOCATIONS[0];
-
-    for (const loc of CITY_LOCATIONS) {
-      const dist = Math.hypot(loc.lat - lat, loc.lng - lng);
-      if (dist < minDistance) {
-        minDistance = dist;
-        nearest = loc;
-      }
-    }
-
-    const name =
-      minDistance < 0.008
-        ? nearest.name
-        : `Hargeisa Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-
-    const address =
-      minDistance < 0.008
-        ? nearest.address
-        : `GPS: ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
+    const nearestInfo = findNearestHargeisaPlace(lat, lng);
 
     const newLoc = {
       id: `google_pin_${Date.now()}`,
-      name,
-      address,
+      name: nearestInfo.name,
+      address: nearestInfo.address,
       lat,
       lng,
     };
