@@ -74,6 +74,7 @@ import { WadaageDriverDashboard } from './WadaageDriverDashboard';
 import { formatCurrency, EXCHANGE_RATE_USD_TO_SLSH } from '../../utils/geo';
 import { notificationService } from '../../services/notificationService';
 import { voiceNavigationService } from '../../services/voiceNavigationService';
+import { sounds } from '../../utils/audio';
 import { WadaageLogo } from '../Common/WadaageLogo';
 
 export const MobileDriverApp: React.FC = () => {
@@ -129,6 +130,7 @@ export const MobileDriverApp: React.FC = () => {
   const [dismissKycBanner, setDismissKycBanner] = useState(false);
 
   const [requestTimer, setRequestTimer] = useState(60);
+  const [isAcceptingOrder, setIsAcceptingOrder] = useState<boolean>(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showSosModal, setShowSosModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
@@ -226,7 +228,8 @@ export const MobileDriverApp: React.FC = () => {
 
   // Trigger push notification, vibration, and background alert on incoming ride request
   useEffect(() => {
-    if (incomingDriverRequest) {
+    const isDriverEngaged = currentRide && ['accepted', 'driver_arrived', 'in_progress'].includes(currentRide.status);
+    if (incomingDriverRequest && !isDriverEngaged) {
       notificationService.requestWakeLock();
       const fareUsd = incomingDriverRequest.totalFare || 2.50;
       const fareSos = Math.round(fareUsd * EXCHANGE_RATE_USD_TO_SLSH);
@@ -242,7 +245,7 @@ export const MobileDriverApp: React.FC = () => {
     } else {
       notificationService.stopEmergencyOrderRingtone();
     }
-  }, [incomingDriverRequest]);
+  }, [incomingDriverRequest, currentRide?.status]);
 
   const handleToggleOnline = () => {
     if (!isKycApproved && !driverModeOnline) {
@@ -622,14 +625,8 @@ export const MobileDriverApp: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      sounds.playButtonClick();
                       advanceDriverRideState();
-                      if (currentRide.status === 'accepted') {
-                        voiceNavigationService.speak('Arrived at pickup point. Waiting for passenger.', 'en', true);
-                      } else if (currentRide.status === 'driver_arrived') {
-                        voiceNavigationService.speak('Trip started. Following route to dropoff destination.', 'en', true);
-                      } else if (currentRide.status === 'in_progress') {
-                        voiceNavigationService.speak('Trip completed. Thank you for driving with Wadaage.', 'en', true);
-                      }
                     }}
                     className="py-2.5 px-4 rounded-2xl bg-[#008751] hover:bg-[#007345] text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-95 flex items-center space-x-1.5"
                   >
@@ -746,7 +743,11 @@ export const MobileDriverApp: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => acceptRideByDriver()}
+                  onClick={() => {
+                    notificationService.stopEmergencyOrderRingtone();
+                    sounds.playButtonClick();
+                    acceptRideByDriver();
+                  }}
                   className="py-2.5 px-3 rounded-xl bg-[#008751] hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-1"
                 >
                   <CheckCircle className="w-4 h-4" />
@@ -854,18 +855,26 @@ export const MobileDriverApp: React.FC = () => {
                       <div className="pt-1">
                         <button
                           type="button"
-                          onClick={() => {
+                          disabled={isAcceptingOrder}
+                          onClick={async () => {
+                            notificationService.stopEmergencyOrderRingtone();
+                            sounds.playButtonClick();
                             try {
                               if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
                                 navigator.vibrate([30, 20, 30]);
                               }
                             } catch (_e) {}
-                            acceptRideByDriver(currentUser?.id);
+                            setIsAcceptingOrder(true);
+                            try {
+                              await acceptRideByDriver(currentUser?.id);
+                            } finally {
+                              setIsAcceptingOrder(false);
+                            }
                           }}
-                          className="w-full py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] active:bg-[#006038] text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none"
+                          className="w-full py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] active:bg-[#006038] text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-[#008751]/30 transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none disabled:opacity-75 disabled:cursor-not-allowed"
                         >
                           <Check className="w-5 h-5 stroke-[3]" />
-                          <span>AQBAL DALABKA • ACCEPT ({requestTimer}s)</span>
+                          <span>{isAcceptingOrder ? 'AQBALAYA... (ACCEPTING)' : `AQBAL DALABKA • ACCEPT (${requestTimer}s)`}</span>
                         </button>
                       </div>
 
@@ -873,7 +882,11 @@ export const MobileDriverApp: React.FC = () => {
                       <div className={`grid ${(!currentRide || currentRide.status === 'searching' || currentRide.status === 'idle') ? 'grid-cols-2' : 'grid-cols-1'} gap-3 pt-1`}>
                         <button
                           type="button"
-                          onClick={() => declineRideByDriver()}
+                          onClick={() => {
+                            notificationService.stopEmergencyOrderRingtone();
+                            sounds.playButtonClick();
+                            declineRideByDriver();
+                          }}
                           className="py-3 px-4 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 border-2 border-rose-300 dark:border-rose-700 font-black text-xs uppercase tracking-wider transition active:scale-95 flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
                         >
                           <X className="w-5 h-5 text-rose-600 stroke-[2.5]" />
@@ -1154,6 +1167,7 @@ export const MobileDriverApp: React.FC = () => {
                             navigator.vibrate([40, 30, 40]);
                           }
                         } catch (_e) {}
+                        sounds.playButtonClick();
                         if (activeCarpoolRider === 'A') {
                           if (currentRide.status === 'accepted') advanceIndividualRiderAction('RIDER_A', 'arrived');
                           else if (currentRide.status === 'driver_arrived') advanceIndividualRiderAction('RIDER_A', 'pickup');
@@ -1194,14 +1208,8 @@ export const MobileDriverApp: React.FC = () => {
                               navigator.vibrate([40, 30, 40]);
                             }
                           } catch (_e) {}
+                          sounds.playButtonClick();
                           advanceDriverRideState();
-                          if (currentRide.status === 'accepted') {
-                            voiceNavigationService.speak('Arrived at pickup. Waiting for passenger.', 'en', true);
-                          } else if (currentRide.status === 'driver_arrived') {
-                            voiceNavigationService.speak('Trip started. Heading to destination.', 'en', true);
-                          } else if (currentRide.status === 'in_progress') {
-                            voiceNavigationService.speak('Trip completed. Please collect fare.', 'en', true);
-                          }
                         }}
                         className={`w-full min-h-[58px] py-3.5 px-4 rounded-2xl text-white font-black text-sm uppercase tracking-wider shadow-xl transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer touch-manipulation select-none border-2 ${
                           currentRide.status === 'accepted'
@@ -1910,6 +1918,7 @@ export const MobileDriverApp: React.FC = () => {
                               navigator.vibrate([40, 30, 40]);
                             }
                           } catch (_e) {}
+                          sounds.playButtonClick();
                           advanceDriverRideState();
                         }}
                         className="w-full min-h-[58px] py-4 px-4 rounded-2xl bg-[#008751] hover:bg-[#007445] active:bg-[#006038] text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-700/40 border-2 border-emerald-400/50 transition-all duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none"

@@ -35,6 +35,8 @@ import { DestinationModeModal } from './DestinationModeModal';
 import { WorkingCapitalModal } from './WorkingCapitalModal';
 import { SafetyCentreDrawer } from './SafetyCentreDrawer';
 import { AppInfoWalletModal } from '../Common/AppInfoWalletModal';
+import { sounds } from '../../utils/audio';
+import { notificationService } from '../../services/notificationService';
 
 export interface WadaageDriverDashboardProps {
   onOpenActivity?: () => void;
@@ -337,7 +339,11 @@ export const WadaageDriverDashboard: React.FC<WadaageDriverDashboardProps> = ({
             {/* Action Buttons: Accept / Transfer / Decline */}
             <div className={`grid ${(!currentRide || currentRide.status === 'searching' || currentRide.status === 'idle') ? 'grid-cols-3' : 'grid-cols-2'} gap-2 pt-1`}>
               <button
-                onClick={() => declineRideByDriver()}
+                onClick={() => {
+                  notificationService.stopEmergencyOrderRingtone();
+                  sounds.playButtonClick();
+                  declineRideByDriver();
+                }}
                 className="py-2.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-black rounded-xl text-xs transition active:scale-95"
               >
                 Decline
@@ -352,7 +358,11 @@ export const WadaageDriverDashboard: React.FC<WadaageDriverDashboardProps> = ({
                 </button>
               )}
               <button
-                onClick={() => acceptRideByDriver(currentDriver.id)}
+                onClick={() => {
+                  notificationService.stopEmergencyOrderRingtone();
+                  sounds.playButtonClick();
+                  acceptRideByDriver(currentDriver.id);
+                }}
                 className="py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-emerald-500/30 transition active:scale-95"
               >
                 Accept Trip

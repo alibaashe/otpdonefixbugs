@@ -5,6 +5,8 @@ class NotificationService {
   private permission: NotificationPermission = 'default';
   private audioCtx: AudioContext | null = null;
   private ringtoneInterval: any = null;
+  private activeOscillators: OscillatorNode[] = [];
+  private isRingtonePlaying: boolean = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -58,124 +60,99 @@ class NotificationService {
 
   // CLEAR DUAL-TONE CHIME FOR NEW INCOMING ORDER (High-alert alarm chime with screen wake)
   public startEmergencyOrderRingtone() {
+    if (this.isRingtonePlaying && this.ringtoneInterval) {
+      return;
+    }
     this.stopEmergencyOrderRingtone();
+    this.isRingtonePlaying = true;
     this.requestWakeLock();
     try {
       const playPulse = () => {
+        if (!this.isRingtonePlaying) return;
         const ctx = this.getAudioContext();
         if (!ctx) return;
         if (ctx.state === 'suspended') {
           ctx.resume().catch(() => {});
         }
         const now = ctx.currentTime;
-        // Urgent 4-tone ascending alert chime: F5 (698.46Hz) -> A5 (880Hz) -> C6 (1046.5Hz) -> F6 (1396.9Hz)
-        const notes = [698.46, 880.0, 1046.5, 1396.91];
+        // Clean 3-tone ascending alert chime: F5 (698.46Hz) -> A5 (880Hz) -> C6 (1046.5Hz)
+        const notes = [698.46, 880.0, 1046.5];
         notes.forEach((freq, idx) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
+          if (!this.isRingtonePlaying) return;
+          try {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
 
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.11);
 
-          gain.gain.setValueAtTime(0.001, now + idx * 0.11);
-          gain.gain.exponentialRampToValueAtTime(0.7, now + idx * 0.11 + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.28);
+            gain.gain.setValueAtTime(0.001, now + idx * 0.11);
+            gain.gain.exponentialRampToValueAtTime(0.35, now + idx * 0.11 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.25);
 
-          osc.connect(gain);
-          gain.connect(ctx.destination);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
 
-          osc.start(now + idx * 0.11);
-          osc.stop(now + idx * 0.11 + 0.3);
+            osc.onended = () => {
+              const pos = this.activeOscillators.indexOf(osc);
+              if (pos > -1) this.activeOscillators.splice(pos, 1);
+            };
+
+            this.activeOscillators.push(osc);
+            osc.start(now + idx * 0.11);
+            osc.stop(now + idx * 0.11 + 0.26);
+          } catch (_e) {}
         });
       };
 
       playPulse();
       this.ringtoneInterval = setInterval(() => {
+        if (!this.isRingtonePlaying) {
+          this.stopEmergencyOrderRingtone();
+          return;
+        }
         playPulse();
-        this.vibrateDevice([800, 150, 800, 150, 1000]);
-      }, 1400);
+        this.vibrateDevice([400, 150, 400]);
+      }, 1600);
     } catch (_e) {}
   }
 
+  // Instantly and completely stop all ringing, vibration, and oscillator audio nodes
   public stopEmergencyOrderRingtone() {
+    this.isRingtonePlaying = false;
     if (this.ringtoneInterval) {
       clearInterval(this.ringtoneInterval);
       this.ringtoneInterval = null;
+    }
+    // Stop all active oscillators immediately
+    if (this.activeOscillators && this.activeOscillators.length > 0) {
+      this.activeOscillators.forEach((osc) => {
+        try {
+          osc.stop();
+          osc.disconnect();
+        } catch (_e) {}
+      });
+      this.activeOscillators = [];
+    }
+    // Stop vibration immediately
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(0);
+      } catch (_e) {}
     }
   }
 
   // Custom high-priority sound alert synthesizers (Web Audio API)
   public playDriverAcceptedSound() {
-    try {
-      const ctx = this.getAudioContext();
-      if (!ctx) return;
-      const now = ctx.currentTime;
-      // Ascending celebratory 4-tone chime: C5 -> E5 -> G5 -> C6
-      const notes = [523.25, 659.25, 783.99, 1046.5];
-      notes.forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.14);
-        gain.gain.setValueAtTime(0.001, now + idx * 0.14);
-        gain.gain.exponentialRampToValueAtTime(0.4, now + idx * 0.14 + 0.03);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + idx * 0.14);
-        osc.stop(now + idx * 0.14 + 0.4);
-      });
-    } catch (_e) {}
+    // Consolidated through SoundManager in utils/audio.ts to prevent duplicate sounds
   }
 
   public playDriverArrivedSound() {
-    try {
-      const ctx = this.getAudioContext();
-      if (!ctx) return;
-      const now = ctx.currentTime;
-      // Dual-tone urgent bell chime repeated twice
-      [0, 0.28].forEach((offset) => {
-        const osc1 = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc1.type = 'sine';
-        osc2.type = 'sine';
-        osc1.frequency.setValueAtTime(880, now + offset);
-        osc2.frequency.setValueAtTime(1318.51, now + offset);
-        gain.gain.setValueAtTime(0.001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.5, now + offset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.25);
-        osc1.connect(gain);
-        osc2.connect(gain);
-        gain.connect(ctx.destination);
-        osc1.start(now + offset);
-        osc2.start(now + offset);
-        osc1.stop(now + offset + 0.26);
-        osc2.stop(now + offset + 0.26);
-      });
-    } catch (_e) {}
+    // Consolidated through SoundManager in utils/audio.ts to prevent duplicate sounds
   }
 
   public playMessageSound() {
-    try {
-      const ctx = this.getAudioContext();
-      if (!ctx) return;
-      const now = ctx.currentTime;
-      // Quick double pop notification chime for chat messages
-      [0, 0.1].forEach((offset, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(i === 0 ? 600 : 900, now + offset);
-        gain.gain.setValueAtTime(0.001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.4, now + offset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.14);
-      });
-    } catch (_e) {}
+    // Consolidated through SoundManager in utils/audio.ts to prevent duplicate sounds
   }
 
   // Register service worker for background & sleeping APK push notifications

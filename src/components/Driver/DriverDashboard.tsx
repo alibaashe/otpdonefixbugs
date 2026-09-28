@@ -27,6 +27,8 @@ import { RideOrderDetailsModal } from './RideOrderDetailsModal';
 import { WadaageDriverDashboard } from './WadaageDriverDashboard';
 import { EXCHANGE_RATE_USD_TO_SLSH } from '../../utils/geo';
 import { UnifiedMap } from '../Map/UnifiedMap';
+import { sounds } from '../../utils/audio';
+import { notificationService } from '../../services/notificationService';
 
 export const DriverDashboard: React.FC = () => {
   const {
@@ -619,7 +621,10 @@ export const DriverDashboard: React.FC = () => {
               <div className="pt-2">
                 {currentRide.status === 'accepted' && (
                   <button
-                    onClick={advanceDriverRideState}
+                    onClick={() => {
+                      sounds.playButtonClick();
+                      advanceDriverRideState();
+                    }}
                     className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-full text-sm uppercase tracking-wider transition shadow-xl"
                   >
                     ARRIVED
@@ -627,7 +632,10 @@ export const DriverDashboard: React.FC = () => {
                 )}
                 {currentRide.status === 'driver_arrived' && (
                   <button
-                    onClick={advanceDriverRideState}
+                    onClick={() => {
+                      sounds.playButtonClick();
+                      advanceDriverRideState();
+                    }}
                     className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-full text-sm uppercase tracking-wider transition shadow-xl"
                   >
                     START TRIP (VERIFIED)
@@ -635,7 +643,10 @@ export const DriverDashboard: React.FC = () => {
                 )}
                 {currentRide.status === 'in_progress' && (
                   <button
-                    onClick={advanceDriverRideState}
+                    onClick={() => {
+                      sounds.playButtonClick();
+                      advanceDriverRideState();
+                    }}
                     className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-black py-4 rounded-full text-sm uppercase tracking-wider transition shadow-xl"
                   >
                     COMPLETE TRIP & COLLECT {formatCurrency(currentRide.totalFare)}
@@ -761,7 +772,11 @@ export const DriverDashboard: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
                 {/* 1. DECLINE */}
                 <button
-                  onClick={() => declineRideByDriver()}
+                  onClick={() => {
+                    notificationService.stopEmergencyOrderRingtone();
+                    sounds.playButtonClick();
+                    declineRideByDriver();
+                  }}
                   className="bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 font-extrabold py-3.5 px-3 rounded-2xl text-xs uppercase transition border border-slate-700 hover:border-rose-800/60 flex items-center justify-center space-x-1"
                 >
                   <span>✕</span>
@@ -780,7 +795,11 @@ export const DriverDashboard: React.FC = () => {
 
                 {/* 3. ACCEPT (WITH 60s COUNTDOWN INDICATOR) */}
                 <button
-                  onClick={() => acceptRideByDriver(currentDriver.id)}
+                  onClick={() => {
+                    notificationService.stopEmergencyOrderRingtone();
+                    sounds.playButtonClick();
+                    acceptRideByDriver(currentDriver.id);
+                  }}
                   className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-3 rounded-2xl text-xs uppercase tracking-wider transition shadow-xl flex items-center justify-center space-x-2 active:scale-98"
                 >
                   <span>ACCEPT</span>

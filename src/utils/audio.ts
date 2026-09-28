@@ -3,6 +3,7 @@
 class SoundManager {
   private ctx: AudioContext | null = null;
   private soundEnabled: boolean = true;
+  private lastPlayed: Record<string, number> = {};
 
   constructor() {
     // AudioContext will be initialized on first user interaction
@@ -16,7 +17,7 @@ class SoundManager {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -28,9 +29,44 @@ class SoundManager {
     return this.soundEnabled;
   }
 
+  // Soft tactile button click sound for smooth UI interaction
+  public playButtonClick() {
+    if (!this.soundEnabled) return;
+    const nowMs = Date.now();
+    if (nowMs - (this.lastPlayed['click'] || 0) < 120) return;
+    this.lastPlayed['click'] = nowMs;
+
+    this.initCtx();
+    if (!this.ctx) return;
+
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(720, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.04);
+
+      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.045);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.05);
+    } catch {
+      // Audio context suppressed
+    }
+  }
+
   // Incoming ride request ping (Two-tone alert)
   public playIncomingPing() {
     if (!this.soundEnabled) return;
+    const nowMs = Date.now();
+    if (nowMs - (this.lastPlayed['incoming'] || 0) < 800) return;
+    this.lastPlayed['incoming'] = nowMs;
+
     this.initCtx();
     if (!this.ctx) return;
 
@@ -55,9 +91,13 @@ class SoundManager {
     }
   }
 
-  // Ride accepted chime (Uplifting major triad)
+  // Ride accepted chime (Uplifting major triad - debounced to prevent repeating)
   public playAcceptedChime() {
     if (!this.soundEnabled) return;
+    const nowMs = Date.now();
+    if (nowMs - (this.lastPlayed['accepted'] || 0) < 1400) return;
+    this.lastPlayed['accepted'] = nowMs;
+
     this.initCtx();
     if (!this.ctx) return;
 
@@ -88,6 +128,10 @@ class SoundManager {
   // Ride arrival or completion victory chime
   public playCompletedSound() {
     if (!this.soundEnabled) return;
+    const nowMs = Date.now();
+    if (nowMs - (this.lastPlayed['completed'] || 0) < 1400) return;
+    this.lastPlayed['completed'] = nowMs;
+
     this.initCtx();
     if (!this.ctx) return;
 
@@ -115,6 +159,10 @@ class SoundManager {
   // Chat message pop sound for incoming messages
   public playMessageSound() {
     if (!this.soundEnabled) return;
+    const nowMs = Date.now();
+    if (nowMs - (this.lastPlayed['message'] || 0) < 400) return;
+    this.lastPlayed['message'] = nowMs;
+
     this.initCtx();
     if (!this.ctx) return;
 
@@ -137,6 +185,14 @@ class SoundManager {
     } catch {
       // Ignore
     }
+  }
+
+  public stopAll() {
+    try {
+      if (this.ctx && this.ctx.state === 'running') {
+        this.ctx.suspend().catch(() => {});
+      }
+    } catch (_e) {}
   }
 }
 

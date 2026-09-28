@@ -4342,7 +4342,6 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setCurrentRide(finalRide);
         setIncomingDriverRequest(null);
-        sounds.playAcceptedChime();
         syncRideToHostinger(finalRide);
         broadcastRideEvent('RIDE_ACCEPTED', finalRide);
         return { success: true, ride: finalRide };
@@ -4362,7 +4361,6 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Fallback only if transient network hiccup
         setCurrentRide(updated);
         setIncomingDriverRequest(null);
-        sounds.playAcceptedChime();
         saveRideToFirestore(updated);
         syncRideToHostinger(updated);
         broadcastRideEvent('RIDE_ACCEPTED', updated);
@@ -4858,7 +4856,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 1. Step 1: accepted -> driver_arrived ("📍 WAAN GAADHAY • I HAVE ARRIVED")
     if (currentRide.status === 'accepted') {
-      sounds.playIncomingPing();
+      sounds.playButtonClick();
       const updatedWaypoints = currentRide.optimalWaypointsSequence
         ? currentRide.optimalWaypointsSequence.map((w, idx) =>
             (idx === 0 || w.type === 'PICKUP') ? { ...w, status: 'arrived' as any } : w
@@ -4880,7 +4878,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 2. Step 2: driver_arrived -> in_progress ("🚗 BILOW SAFARKA • START TRIP")
     if (currentRide.status === 'driver_arrived') {
-      sounds.playAcceptedChime();
+      sounds.playButtonClick();
       handleRideStartCommissionDeduction(currentRide);
 
       const updatedWaypoints = currentRide.optimalWaypointsSequence

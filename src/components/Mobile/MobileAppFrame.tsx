@@ -38,6 +38,8 @@ import { UserRole } from '../../types';
 import { AppInfoWalletModal } from '../Common/AppInfoWalletModal';
 import { SmartLocationAutocomplete } from '../Passenger/SmartLocationAutocomplete';
 import { WadaageLogo } from '../Common/WadaageLogo';
+import { sounds } from '../../utils/audio';
+import { notificationService } from '../../services/notificationService';
 
 interface MobileAppFrameProps {
   onOpenSafetyModal: () => void;
@@ -589,13 +591,21 @@ export const MobileAppFrame: React.FC<MobileAppFrameProps> = ({ onOpenSafetyModa
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => declineRideByDriver()}
+                        onClick={() => {
+                          notificationService.stopEmergencyOrderRingtone();
+                          sounds.playButtonClick();
+                          declineRideByDriver();
+                        }}
                         className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-xl text-xs"
                       >
                         Decline
                       </button>
                       <button
-                        onClick={() => acceptRideByDriver()}
+                        onClick={() => {
+                          notificationService.stopEmergencyOrderRingtone();
+                          sounds.playButtonClick();
+                          acceptRideByDriver();
+                        }}
                         className="bg-[#00B14F] hover:bg-emerald-600 text-white font-extrabold py-2 rounded-xl text-xs"
                       >
                         Accept Trip
@@ -626,7 +636,10 @@ export const MobileAppFrame: React.FC<MobileAppFrameProps> = ({ onOpenSafetyModa
                     </div>
 
                     <button
-                      onClick={advanceDriverRideState}
+                      onClick={() => {
+                        sounds.playButtonClick();
+                        advanceDriverRideState();
+                      }}
                       className="w-full bg-[#00B14F] hover:bg-emerald-600 text-white font-black py-3 rounded-xl text-xs uppercase"
                     >
                       Advance Trip Workflow
