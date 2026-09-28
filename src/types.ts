@@ -305,7 +305,7 @@ export interface DriverWalletTransaction {
   referenceId?: string;
   smsReceiptText?: string;
   verifiedAt?: string;
-  verificationMethod?: 'auto_ussd_gateway' | 'admin_confirmation' | 'manual_ref';
+  verificationMethod?: 'auto_ussd_gateway' | 'admin_confirmation' | 'manual_ref' | 'instant_gateway';
   rideId?: string;
   adminNote?: string;
   newBalanceUsd?: number;

@@ -42,6 +42,7 @@ export const INITIAL_DRIVERS: Driver[] = [
     hoursOnline: 6,
     acceptanceRate: 98,
     service_type: 'Both',
+    walletBalanceUsd: 15.00,
   },
   {
     id: 'drv_hga_02',
@@ -68,6 +69,7 @@ export const INITIAL_DRIVERS: Driver[] = [
     hoursOnline: 5,
     acceptanceRate: 96,
     service_type: 'Normal',
+    walletBalanceUsd: 15.00,
   },
   {
     id: 'drv_hga_03',
@@ -94,6 +96,7 @@ export const INITIAL_DRIVERS: Driver[] = [
     hoursOnline: 7,
     acceptanceRate: 99,
     service_type: 'Wadaage',
+    walletBalanceUsd: 15.00,
   },
   {
     id: 'drv_hga_04',
@@ -120,6 +123,7 @@ export const INITIAL_DRIVERS: Driver[] = [
     hoursOnline: 8,
     acceptanceRate: 97,
     service_type: 'Both',
+    walletBalanceUsd: 15.00,
   },
 ];
 

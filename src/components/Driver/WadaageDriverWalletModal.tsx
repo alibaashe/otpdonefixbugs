@@ -35,6 +35,7 @@ export const WadaageDriverWalletModal: React.FC<WadaageDriverWalletModalProps> =
     driverWalletTransactions,
     getDriverWalletBalance,
     topUpDriverWallet,
+    toggleDriverOnline,
     pricing,
     driverModeOnline,
     drivers,
@@ -55,13 +56,15 @@ export const WadaageDriverWalletModal: React.FC<WadaageDriverWalletModalProps> =
   // Dedicated reactive balance state variable tracking live driver balance
   const activeDriverId = currentUser?.role === 'driver' ? (currentUser.id || currentUser.phone || 'drv_01') : 'drv_01';
   const calculateCurrentBalanceUsd = () => {
-    const directBal = getDriverWalletBalance ? getDriverWalletBalance(activeDriverId) : 0;
-    if (directBal !== undefined && directBal > 0) return directBal;
-    if (currentUser?.phone && getDriverWalletBalance) {
-      const phoneBal = getDriverWalletBalance(currentUser.phone);
-      if (phoneBal !== undefined && phoneBal > 0) return phoneBal;
+    if (getDriverWalletBalance) {
+      const directBal = getDriverWalletBalance(activeDriverId);
+      if (directBal !== undefined && !isNaN(directBal)) return directBal;
+      if (currentUser?.phone) {
+        const phoneBal = getDriverWalletBalance(currentUser.phone);
+        if (phoneBal !== undefined && !isNaN(phoneBal)) return phoneBal;
+      }
     }
-    return driverWalletBalanceUsd !== undefined ? driverWalletBalanceUsd : 0;
+    return driverWalletBalanceUsd !== undefined && !isNaN(driverWalletBalanceUsd) ? driverWalletBalanceUsd : 0;
   };
 
   const [activeBalanceUsd, setActiveBalanceUsd] = useState<number>(calculateCurrentBalanceUsd);
@@ -458,11 +461,29 @@ export const WadaageDriverWalletModal: React.FC<WadaageDriverWalletModalProps> =
                   </div>
                 )}
 
-                {/* Success Message */}
+                {/* Success Message & Immediate Go Online Button */}
                 {successMsg && (
-                  <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{successMsg}</span>
+                  <div className="p-4 bg-emerald-950/70 border-2 border-emerald-500 text-white rounded-2xl text-xs space-y-3 shadow-xl">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0 font-black">
+                        <Check className="w-5 h-5 stroke-[3]" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-black text-sm text-emerald-300">Ku-Shubashadu Way Guuleysatay! (Top-Up Confirmed)</h4>
+                        <p className="text-slate-200 text-xs">{successMsg}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleDriverOnline(true);
+                        onClose();
+                      }}
+                      className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+                    >
+                      <Zap className="w-4 h-4 fill-current" />
+                      <span>Geli Online Hadda • Go Online to Receive Orders</span>
+                    </button>
                   </div>
                 )}
 

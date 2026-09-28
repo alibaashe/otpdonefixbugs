@@ -221,7 +221,7 @@ interface RideContextType {
     referenceId?: string,
     smsText?: string,
     targetDriverId?: string
-  ) => { success: boolean; message: string; txId?: string };
+  ) => { success: boolean; message: string; txId?: string; newBalanceUsd?: number; newBalanceSos?: number };
   verifyPaymentReceipt: (
     referenceId: string,
     amountSos: number,
@@ -1650,8 +1650,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return Math.max(0, Math.round(ledgerSumUsd * 100) / 100);
     }
 
-    // Default starter credit ($15.00) so newly installed APK and newly registered drivers can receive orders immediately without lockout
-    return 15.00;
+    // Default: strictly 0.00 if unrecorded or drained
+    return 0.00;
   }, [driverWallets, drivers, currentUser, driverWalletTransactions]);
 
   // Current active driver balance
@@ -1674,6 +1674,57 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error(e);
     }
   }, [driverWallets, driverWalletBalanceUsd, driverWalletTransactions]);
+
+  // Active Balance & Online Status Guard:
+  // When balance is 0 or less, driver CANNOT receive any orders and MUST GO OFFLINE immediately!
+  // Only after top up (balance > 0) can they go online and receive orders.
+  useEffect(() => {
+    if (role === 'driver') {
+      const activeDrvId = currentUser?.id || 'live_driver';
+      const activeDrvPhone = currentUser?.phone || '';
+      const curBal = getDriverWalletBalance(activeDrvId) || (activeDrvPhone ? getDriverWalletBalance(activeDrvPhone) : 0);
+      const minThreshold = pricing?.driverMinWalletThresholdUsd || 0.10;
+
+      if (curBal <= 0 || curBal < minThreshold) {
+        if (driverModeOnline) {
+          console.warn(`[Driver Balance Guard] Driver balance is $${curBal.toFixed(2)} (0 SLSH or below threshold). Forcing driver OFFLINE.`);
+          setDriverModeOnline(false);
+          setLowBalanceLockoutAlert(true);
+          setIncomingDriverRequest(null);
+          notificationService.stopEmergencyOrderRingtone();
+
+          setDrivers((prev) =>
+            prev.map((d) => (d.id === activeDrvId || (activeDrvPhone && d.phone === activeDrvPhone) ? { ...d, status: 'offline' } : d))
+          );
+
+          try {
+            fetch(getApiUrl('/api/drivers/location'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: activeDrvId,
+                name: currentUser?.name || 'Driver Partner',
+                phone: activeDrvPhone,
+                lat: driverGpsStatus?.lat || 9.5600,
+                lng: driverGpsStatus?.lng || 44.0650,
+                status: 'offline',
+              }),
+            }).catch(() => {});
+          } catch (_e) {}
+        }
+      }
+    }
+  }, [driverWallets, driverWalletBalanceUsd, role, currentUser, pricing, driverModeOnline, getDriverWalletBalance, driverGpsStatus]);
+
+  // Offline status guard: When driver is offline, CANNOT receive any incoming orders!
+  useEffect(() => {
+    if (!driverModeOnline) {
+      if (incomingDriverRequest) {
+        setIncomingDriverRequest(null);
+        notificationService.stopEmergencyOrderRingtone();
+      }
+    }
+  }, [driverModeOnline, incomingDriverRequest]);
 
   // Initial Firestore connection test & real-time listeners across all apps
   useEffect(() => {
@@ -1987,9 +2038,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const activeDrvPhone = currentUser?.phone || '';
             const curDrvBal = getDriverWalletBalance(activeDrvId) || (activeDrvPhone ? getDriverWalletBalance(activeDrvPhone) : 0);
             const minThresholdUsd = pricing?.driverMinWalletThresholdUsd || 0.10;
-            const isEligibleOnlineDriver = driverModeOnline && (curDrvBal >= minThresholdUsd);
+            const isEligibleOnlineDriver = Boolean(driverModeOnline && (curDrvBal >= minThresholdUsd) && curDrvBal > 0);
 
-            if (!isEligibleOnlineDriver) {
+            if (!isEligibleOnlineDriver || !driverModeOnline) {
               setIncomingDriverRequest(null);
             } else {
             // Check for available unassigned searching rides WITHIN ADMIN DISPATCH SEARCH RADIUS
@@ -2092,9 +2143,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const activeDrvPhone = currentUser?.phone || '';
           const curDrvBal = getDriverWalletBalance(activeDrvId) || (activeDrvPhone ? getDriverWalletBalance(activeDrvPhone) : 0);
           const minThresholdUsd = pricing?.driverMinWalletThresholdUsd || 0.10;
-          const isEligibleOnlineDriver = driverModeOnline && (curDrvBal >= minThresholdUsd);
+          const isEligibleOnlineDriver = Boolean(driverModeOnline && (curDrvBal >= minThresholdUsd) && curDrvBal > 0);
 
-          if (!isEligibleOnlineDriver) {
+          if (!isEligibleOnlineDriver || !driverModeOnline) {
             setIncomingDriverRequest(null);
             return;
           }
@@ -2582,14 +2633,11 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const actualDriverPhone = phone || targetDriver?.phone || currentUser?.phone || '';
 
     const isInstantCard = paymentProvider === 'card';
-    const initialStatus: 'completed' | 'pending_verification' = isInstantCard ? 'completed' : 'pending_verification';
-
-    if (isInstantCard) {
-      applyDriverBalanceUpdate(actualDriverId, actualDriverPhone, amountUsd, false);
-    }
+    const newBalUsd = applyDriverBalanceUpdate(actualDriverId, actualDriverPhone, amountUsd, false);
+    const initialStatus: 'completed' | 'pending_verification' = 'completed';
 
     const newTx: DriverWalletTransaction = {
-      id: `dtx_${Date.now()}`,
+      id: `dtx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       driverId: actualDriverId,
       driverName: actualDriverName,
       driverPhone: actualDriverPhone,
@@ -2598,14 +2646,17 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       amountSos,
       originalRequestedAmountSos: amountSos,
       originalRequestedAmountUsd: amountUsd,
-      title: `Top-Up Request via ${providerAccount}`,
+      newBalanceUsd: newBalUsd,
+      title: `Top-Up via ${providerAccount} (+${amountSos.toLocaleString()} SLSH)`,
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: initialStatus,
       paymentProvider,
       referenceId: refCode,
+      verificationMethod: 'instant_gateway',
+      verifiedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
       smsReceiptText:
         smsText ||
-        `Payment request of ${amountSos.toLocaleString()} SLSH via USSD to ${providerAccount}. Ref: ${refCode}`,
+        `Payment of ${amountSos.toLocaleString()} SLSH via USSD to ${providerAccount}. Ref: ${refCode}`,
     };
 
     setDriverWalletTransactions((prev) => {
@@ -2619,15 +2670,28 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetch(getApiUrl('/api/db/wallet-transactions'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTx),
+      body: JSON.stringify({
+        ...newTx,
+        alreadyCreditedOnFrontend: true,
+        newBalanceUsd: newBalUsd,
+      }),
     }).catch(() => {});
+
+    broadcastRideEvent('DRIVER_WALLET_UPDATED', {
+      driverId: actualDriverId,
+      driverPhone: actualDriverPhone,
+      amountUsd,
+      amountSos,
+      newBalanceUsd: newBalUsd,
+      tx: newTx,
+    });
 
     return {
       success: true,
-      message: isInstantCard
-        ? `Card Top-Up of ${amountSos.toLocaleString()} SLSH successfully verified and credited to ${actualDriverName}!`
-        : `Top-Up Request of ${amountSos.toLocaleString()} SLSH submitted for ${actualDriverName} (Ref: ${refCode})! Pending admin check and verification.`,
+      message: `Top-Up of ${amountSos.toLocaleString()} SLSH ($${amountUsd.toFixed(2)}) successful! Your balance is now ${Math.round(newBalUsd * 10000).toLocaleString()} SLSH ($${newBalUsd.toFixed(2)}). You can now go online to receive orders.`,
       txId: newTx.id,
+      newBalanceUsd: newBalUsd,
+      newBalanceSos: Math.round(newBalUsd * 10000),
     };
   };
 
@@ -2667,11 +2731,17 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const actualPhone = foundDriver?.phone || targetPhone;
 
     // Get current balance with fallback to driver record
-    const retrievedBal = getDriverWalletBalance(actualId) || (actualPhone ? getDriverWalletBalance(actualPhone) : 0);
+    const retrievedBal = getDriverWalletBalance(actualId);
+    const retrievedPhoneBal = actualPhone ? getDriverWalletBalance(actualPhone) : undefined;
+    const effectiveRetrievedBal = retrievedBal !== undefined ? retrievedBal : retrievedPhoneBal;
+
     const fallbackBal = foundDriver
-      ? Number(foundDriver.walletBalanceUsd ?? (foundDriver as any).wallet_balance_usd ?? 1.00)
-      : (currentUser?.role === 'driver' ? Number(currentUser.walletBalanceUsd ?? 1.00) : 1.00);
-    const currentBalUsd = retrievedBal > 0 ? retrievedBal : fallbackBal;
+      ? Number(foundDriver.walletBalanceUsd ?? (foundDriver as any).wallet_balance_usd ?? 0.00)
+      : (currentUser?.role === 'driver' ? Number(currentUser.walletBalanceUsd ?? 0.00) : 0.00);
+
+    const currentBalUsd = (effectiveRetrievedBal !== undefined && !isNaN(effectiveRetrievedBal))
+      ? effectiveRetrievedBal
+      : (!isNaN(fallbackBal) ? fallbackBal : 0.00);
 
     const newBalUsd = isAbsoluteBalance
       ? Math.max(0, Math.round(incomingUsdAmount * 100) / 100)
@@ -2751,11 +2821,12 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
           (cleanPhone && dClean && (dClean === cleanPhone || dClean.endsWith(cleanPhone) || cleanPhone.endsWith(dClean)));
 
         if (matches) {
+          const isEligible = newBalUsd >= minThresholdUsd && newBalUsd > 0;
           return {
             ...d,
             walletBalanceUsd: newBalUsd,
             wallet_balance_usd: newBalUsd,
-            status: newBalUsd >= minThresholdUsd ? 'available' : d.status,
+            status: isEligible ? (d.status === 'offline' ? 'offline' : 'available') : 'offline',
           };
         }
         return d;
@@ -2782,10 +2853,14 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             : null
         );
-        if (newBalUsd >= minThresholdUsd) {
+        if (newBalUsd >= minThresholdUsd && newBalUsd > 0) {
           setLowBalanceLockoutAlert(false);
-          setDriverModeOnline(true);
           sounds.playAcceptedChime();
+        } else {
+          setLowBalanceLockoutAlert(true);
+          setDriverModeOnline(false);
+          setIncomingDriverRequest(null);
+          notificationService.stopEmergencyOrderRingtone();
         }
       }
     }
@@ -4009,6 +4084,19 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const performAcceptRideByDriver = async (driverId?: string) => {
     notificationService.stopEmergencyOrderRingtone();
     const idToAssign = driverId || (currentUser?.role === 'driver' && currentUser?.id ? currentUser.id : (drivers.length > 0 ? drivers[0].id : (currentUser?.id || 'live_driver')));
+    const drvPhone = currentUser?.phone || '';
+    const curBal = getDriverWalletBalance(idToAssign) || (drvPhone ? getDriverWalletBalance(drvPhone) : 0);
+    const minThreshold = pricing?.driverMinWalletThresholdUsd || 0.10;
+
+    if (!driverModeOnline || curBal <= 0 || curBal < minThreshold) {
+      setLowBalanceLockoutAlert(true);
+      setIncomingDriverRequest(null);
+      notificationService.stopEmergencyOrderRingtone();
+      return {
+        success: false,
+        message: 'Ma aqbali kartid dalab inta aad offline tahay ama haraagaagu yahay 0. Fadlan ku shubo haraaga si aad online u gasho.',
+      };
+    }
 
     // If driver already on active ride and accepting incoming co-rider (Passenger B)
     if (
@@ -4932,15 +5020,22 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const toggleDriverOnline = (online?: boolean | any): boolean => {
     const minThreshold = pricing.driverMinWalletThresholdUsd || 0.10;
     const isGoingOnline = typeof online === 'boolean' ? online : !driverModeOnline;
-    if (isGoingOnline && driverWalletBalanceUsd < minThreshold) {
+
+    const activeDrvId = currentUser?.id || 'live_driver';
+    const activeDrvPhone = currentUser?.phone || '';
+    const curDrvBal = getDriverWalletBalance(activeDrvId) || (activeDrvPhone ? getDriverWalletBalance(activeDrvPhone) : 0);
+
+    if (isGoingOnline && (curDrvBal <= 0 || curDrvBal < minThreshold)) {
       setDriverModeOnline(false);
       setLowBalanceLockoutAlert(true);
-      return false; // Blocked going online due to balance < 1,000 SLSH ($0.10 USD)
+      setIncomingDriverRequest(null);
+      notificationService.stopEmergencyOrderRingtone();
+      return false; // Blocked going online due to balance <= 0 or below minimum threshold
     }
 
     setDriverModeOnline(isGoingOnline);
     setDrivers((prev) =>
-      prev.map((d) => (d.id === (currentUser?.id || 'live_driver') ? { ...d, status: isGoingOnline ? 'available' : 'offline' } : d))
+      prev.map((d) => (d.id === activeDrvId || (activeDrvPhone && d.phone === activeDrvPhone) ? { ...d, status: isGoingOnline ? 'available' : 'offline' } : d))
     );
 
     // Persist online/offline status to server
@@ -4949,9 +5044,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: currentUser?.id || 'live_driver',
+          id: activeDrvId,
           name: currentUser?.name || 'Driver Partner',
-          phone: currentUser?.phone || '',
+          phone: activeDrvPhone,
           lat: driverGpsStatus.lat || 9.5600,
           lng: driverGpsStatus.lng || 44.0650,
           status: isGoingOnline ? 'available' : 'offline',
@@ -4959,7 +5054,13 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }).catch(() => {});
     } catch (_e) {}
 
-    if (isGoingOnline) setLowBalanceLockoutAlert(false);
+    if (isGoingOnline) {
+      setLowBalanceLockoutAlert(false);
+      sounds.playAcceptedChime();
+    } else {
+      setIncomingDriverRequest(null);
+      notificationService.stopEmergencyOrderRingtone();
+    }
     return true;
   };
 
