@@ -33,7 +33,93 @@ import { sendWhatsAppOtp, verifyWhatsAppOtp, displayFormattedPhone } from '../..
 import { WadaageLogo } from '../Common/WadaageLogo';
 import { SomalilandFlag } from '../Common/SomalilandFlag';
 import { INITIAL_REGISTERED_USERS, INITIAL_DRIVERS, INITIAL_DRIVER_APPLICATIONS } from '../../data/mockData';
-import { secureStorage } from '../../utils/security';
+import { secureStorage, safeJsonParse } from '../../utils/security';
+import { verifyCredentialsOnline } from '../../services/firebase';
+
+// Helper to keep local device storage updated with verified credentials
+const syncUserToLocalCache = (user: any, verifiedPassword?: string) => {
+  try {
+    const raw = localStorage.getItem('wadaage_user_management_records');
+    const records = safeJsonParse(raw, []);
+    const cleanDigits = String(user.phone || '').replace(/\D/g, '');
+    const idx = records.findIndex((r: any) => r.id === user.id || (cleanDigits && String(r.phone || '').replace(/\D/g, '').endsWith(cleanDigits)));
+    const pwd = verifiedPassword || user.password;
+    if (idx >= 0) {
+      records[idx] = { ...records[idx], ...user, password: pwd };
+    } else {
+      records.unshift({
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        role: user.role === 'admin' ? 'Admin' : user.role === 'driver' ? 'Driver' : 'Passenger',
+        password: pwd,
+        status: 'Active',
+        rating: user.rating || 5.0,
+        trips: user.totalTrips || 0,
+        registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      });
+    }
+    localStorage.setItem('wadaage_user_management_records', JSON.stringify(records));
+
+    const rawUsers = localStorage.getItem('wadaage_registered_users');
+    const regUsers = safeJsonParse(rawUsers, []);
+    const uIdx = regUsers.findIndex((u: any) => u.id === user.id || (cleanDigits && String(u.phone || '').replace(/\D/g, '').endsWith(cleanDigits)));
+    if (uIdx >= 0) {
+      regUsers[uIdx] = { ...regUsers[uIdx], ...user, password: pwd };
+    } else {
+      regUsers.unshift({ ...user, password: pwd });
+    }
+    localStorage.setItem('wadaage_registered_users', JSON.stringify(regUsers));
+    secureStorage.setItem('wadaage_registered_users', regUsers);
+  } catch (_e) {}
+};
+
+const syncDriverToLocalCache = (driver: any, verifiedPassword?: string) => {
+  try {
+    const pwd = verifiedPassword || driver.password;
+    const cleanDigits = String(driver.phone || '').replace(/\D/g, '');
+
+    const raw = localStorage.getItem('wadaage_user_management_records');
+    const records = safeJsonParse(raw, []);
+    const idx = records.findIndex((r: any) => r.id === driver.id || (cleanDigits && String(r.phone || '').replace(/\D/g, '').endsWith(cleanDigits)));
+    if (idx >= 0) {
+      records[idx] = { ...records[idx], ...driver, password: pwd, role: 'Driver' };
+    } else {
+      records.unshift({
+        id: driver.id,
+        name: driver.name,
+        phone: driver.phone,
+        role: 'Driver',
+        password: pwd,
+        status: 'Active',
+        rating: driver.rating || 5.0,
+        trips: driver.totalTrips || 0,
+        registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      });
+    }
+    localStorage.setItem('wadaage_user_management_records', JSON.stringify(records));
+
+    const rawDrivers = localStorage.getItem('wadaage_registered_drivers');
+    const regDrivers = safeJsonParse(rawDrivers, []);
+    const dIdx = regDrivers.findIndex((d: any) => d.id === driver.id || (cleanDigits && String(d.phone || '').replace(/\D/g, '').endsWith(cleanDigits)));
+    if (dIdx >= 0) {
+      regDrivers[dIdx] = { ...regDrivers[dIdx], ...driver, password: pwd };
+    } else {
+      regDrivers.unshift({ ...driver, password: pwd });
+    }
+    localStorage.setItem('wadaage_registered_drivers', JSON.stringify(regDrivers));
+
+    const customDrivers = secureStorage.getItem<any[]>('wadaage_custom_drivers', []) || [];
+    const cIdx = customDrivers.findIndex((d: any) => d.id === driver.id || (cleanDigits && String(d.phone || '').replace(/\D/g, '').endsWith(cleanDigits)));
+    if (cIdx >= 0) {
+      customDrivers[cIdx] = { ...customDrivers[cIdx], ...driver, password: pwd };
+    } else {
+      customDrivers.unshift({ ...driver, password: pwd });
+    }
+    secureStorage.setItem('wadaage_custom_drivers', customDrivers);
+  } catch (_e) {}
+};
 
 export const LoginScreen: React.FC = () => {
   const {
@@ -405,7 +491,24 @@ export const LoginScreen: React.FC = () => {
           return;
         } else {
           // --- Sign In Existing Rider ---
-          const existing = findRegisteredRider(cleanFullPhone) || findRegisteredRider(cleanPhone);
+          let existing = findRegisteredRider(cleanFullPhone) || findRegisteredRider(cleanPhone);
+
+          // If not found locally or password mismatch with local cache, verify real-time online
+          if (!existing || (existing.password && password && existing.password.trim() !== password.trim())) {
+            const onlineCheck = await verifyCredentialsOnline(cleanPhone, 'passenger', password.trim());
+            if (onlineCheck.success && onlineCheck.user) {
+              existing = onlineCheck.user;
+              syncUserToLocalCache(onlineCheck.user, password.trim());
+            } else if (onlineCheck.foundUser && onlineCheck.error === 'WRONG_PASSWORD') {
+              setIsSubmitting(false);
+              setFormError(
+                language === 'so'
+                  ? 'Erayga sirta ah (Password) ma saxna. Fadlan dib u hubi ama la xidhiidh maamulka.'
+                  : 'Invalid password. Please check your password or contact Wadaage Admin.'
+              );
+              return;
+            }
+          }
 
           if (!existing) {
             setIsSubmitting(false);
@@ -507,7 +610,48 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
-          const { driver: existingDriver, application: existingApp } = findDriverRecord(cleanFullPhone);
+          let { driver: existingDriver, application: existingApp } = findDriverRecord(cleanFullPhone);
+          let storedPassword = existingDriver?.password || existingApp?.password;
+
+          // If driver not found locally, or storedPassword missing or does not match entered password:
+          // Check online immediately against Firestore and server API!
+          if (!existingDriver && !existingApp || !storedPassword || password.trim() !== storedPassword.trim()) {
+            const onlineCheck = await verifyCredentialsOnline(cleanPhone, 'driver', password.trim());
+            if (onlineCheck.success && onlineCheck.user) {
+              const verifiedUser = onlineCheck.user;
+              syncDriverToLocalCache(verifiedUser, password.trim());
+              existingDriver = {
+                id: verifiedUser.id,
+                name: verifiedUser.name,
+                phone: verifiedUser.phone,
+                password: password.trim(),
+                isVerified: true,
+                rating: verifiedUser.rating || 5.0,
+                totalTrips: verifiedUser.totalTrips || 0,
+                status: 'available',
+                avatar: verifiedUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+                vehicle: verifiedUser.vehicle || {
+                  model: 'Toyota Vitz',
+                  licensePlate: 'SL-2026',
+                  category: 'wadaage_both',
+                  color: 'White',
+                  capacity: 4,
+                },
+                currentLocation: { lat: 9.5600, lng: 44.0650 },
+                todayEarnings: 0,
+                weeklyEarnings: 0,
+              };
+              storedPassword = password.trim();
+            } else if (onlineCheck.foundUser && onlineCheck.error === 'WRONG_PASSWORD') {
+              setIsSubmitting(false);
+              setFormError(
+                language === 'so'
+                  ? 'Erayga sirta ah (Password) ma saxna. Fadlan hubi erayga sirta ah ama la xidhiidh maamulka admin-ka.'
+                  : 'Invalid driver password. Please check your password or contact Wadaage Admin.'
+              );
+              return;
+            }
+          }
 
           if (!existingDriver && !existingApp) {
             setIsSubmitting(false);
@@ -519,8 +663,7 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
-          const storedPassword = existingDriver?.password || existingApp?.password;
-          if (!storedPassword || password.trim() !== storedPassword) {
+          if (!storedPassword || password.trim() !== storedPassword.trim()) {
             setIsSubmitting(false);
             setFormError(
               language === 'so'

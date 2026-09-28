@@ -55,10 +55,107 @@ export class WadaageDatabaseService {
         sahal_number: '252906807814',
         rating: 5.0,
         total_trips: 0,
+        password: '',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'usr_rider_demo_01',
+        phone: '+252 63 4819202',
+        name: 'Faadumo Jaamac Cali',
+        email: 'faadumo@wadaage.com',
+        role: 'passenger',
+        avatar_url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+        gender: 'female',
+        status: 'active',
+        wallet_balance_usd: 25.0,
+        wallet_balance_sos: 281250.0,
+        zaad_number: '252634819202',
+        edahab_number: '',
+        sahal_number: '',
+        rating: 5.0,
+        total_trips: 12,
+        password: 'password123',
         created_at: new Date().toISOString(),
       },
     ],
-    drivers: [] as any[],
+    drivers: [
+      {
+        id: 'drv_hga_01',
+        user_id: 'drv_hga_01',
+        name: 'Maxamed Cabdi Faarax',
+        phone: '+252 63 4455667',
+        password: 'password123',
+        vehicle_category: 'wadaage_both',
+        vehicle_model: 'Toyota Vitz',
+        vehicle_color: 'White',
+        vehicle_plate: 'SL-4921',
+        rating: 4.95,
+        total_trips: 342,
+        is_verified: true,
+        kyc_status: 'approved',
+        status: 'available',
+        lat: 9.5620,
+        lng: 44.0645,
+        wallet_balance_usd: 15.0,
+      },
+      {
+        id: 'drv_hga_02',
+        user_id: 'drv_hga_02',
+        name: 'Cabdiraxmaan Cali Nuur',
+        phone: '+252 63 4918201',
+        password: 'password123',
+        vehicle_category: 'wadaage_taxi',
+        vehicle_model: 'Toyota Corolla Fielder',
+        vehicle_color: 'White',
+        vehicle_plate: 'SL-7814',
+        rating: 4.88,
+        total_trips: 215,
+        is_verified: true,
+        kyc_status: 'approved',
+        status: 'available',
+        lat: 9.5745,
+        lng: 44.0530,
+        wallet_balance_usd: 15.0,
+      },
+      {
+        id: 'drv_hga_03',
+        user_id: 'drv_hga_03',
+        name: 'Khadar Xasan Jaamac',
+        phone: '+252 63 4123456',
+        password: 'password123',
+        vehicle_category: 'wadaage_share',
+        vehicle_model: 'Toyota Probox',
+        vehicle_color: 'White',
+        vehicle_plate: 'SL-3392',
+        rating: 4.92,
+        total_trips: 189,
+        is_verified: true,
+        kyc_status: 'approved',
+        status: 'available',
+        lat: 9.5515,
+        lng: 44.0725,
+        wallet_balance_usd: 15.0,
+      },
+      {
+        id: 'drv_hga_04',
+        user_id: 'drv_hga_04',
+        name: 'Mustafe Jaamac Cumar',
+        phone: '+252 63 4889900',
+        password: 'password123',
+        vehicle_category: 'wadaage_both',
+        vehicle_model: 'Toyota Ractis',
+        vehicle_color: 'White',
+        vehicle_plate: 'SL-8105',
+        rating: 4.90,
+        total_trips: 410,
+        is_verified: true,
+        kyc_status: 'approved',
+        status: 'available',
+        lat: 9.5395,
+        lng: 44.0880,
+        wallet_balance_usd: 15.0,
+      },
+    ] as any[],
     driver_applications: [] as any[],
     rides: [] as any[],
     wallet_transactions: [] as any[],
@@ -188,7 +285,87 @@ export class WadaageDatabaseService {
     ]
   };
 
-  private constructor() {}
+  private storeFilePath = path.resolve(process.cwd(), 'wadaage_db_store.json');
+
+  private constructor() {
+    this.loadFromDisk();
+  }
+
+  public saveToDisk(): void {
+    try {
+      fs.writeFileSync(this.storeFilePath, JSON.stringify(this.store, null, 2), 'utf8');
+    } catch (_e) {}
+  }
+
+  public loadFromDisk(): void {
+    try {
+      if (fs.existsSync(this.storeFilePath)) {
+        const raw = fs.readFileSync(this.storeFilePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          if (Array.isArray(parsed.users) && parsed.users.length > 0) {
+            this.store.users = parsed.users;
+          }
+          if (Array.isArray(parsed.drivers) && parsed.drivers.length > 0) {
+            this.store.drivers = parsed.drivers;
+          }
+          if (Array.isArray(parsed.driver_applications)) {
+            this.store.driver_applications = parsed.driver_applications;
+          }
+          if (Array.isArray(parsed.rides)) {
+            this.store.rides = parsed.rides;
+          }
+          if (Array.isArray(parsed.wallet_transactions)) {
+            this.store.wallet_transactions = parsed.wallet_transactions;
+          }
+        }
+      } else {
+        this.saveToDisk();
+      }
+    } catch (_e) {}
+  }
+
+  public updateUserOrDriverPassword(userIdOrPhone: string, newPassword: string): boolean {
+    const cleanPass = newPassword.trim();
+    if (!cleanPass) return false;
+    const cleanDigits = userIdOrPhone.replace(/\D/g, '');
+
+    let found = false;
+
+    // 1. Users
+    for (const u of this.store.users) {
+      const uDigits = (u.phone || '').replace(/\D/g, '');
+      if (u.id === userIdOrPhone || (cleanDigits && uDigits.endsWith(cleanDigits))) {
+        (u as any).password = cleanPass;
+        (u as any).updated_at = new Date().toISOString();
+        found = true;
+      }
+    }
+
+    // 2. Drivers
+    for (const d of this.store.drivers) {
+      const dDigits = (d.phone || '').replace(/\D/g, '');
+      if (d.id === userIdOrPhone || (cleanDigits && dDigits.endsWith(cleanDigits))) {
+        d.password = cleanPass;
+        d.updated_at = new Date().toISOString();
+        found = true;
+      }
+    }
+
+    // 3. Driver Applications
+    if (Array.isArray(this.store.driver_applications)) {
+      for (const a of this.store.driver_applications) {
+        const aDigits = (a.phone || '').replace(/\D/g, '');
+        if (a.id === userIdOrPhone || (cleanDigits && aDigits.endsWith(cleanDigits))) {
+          a.password = cleanPass;
+          found = true;
+        }
+      }
+    }
+
+    this.saveToDisk();
+    return found;
+  }
 
   public static getInstance(): WadaageDatabaseService {
     if (!WadaageDatabaseService.instance) {

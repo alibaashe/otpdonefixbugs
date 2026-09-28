@@ -607,6 +607,9 @@ Return ONLY valid JSON matching this schema:
       }
     }
 
+    // Central persistence across server restarts
+    dbService.updateUserOrDriverPassword(id, cleanPassword);
+
     // Broadcast PASSWORD_UPDATED event
     const ssePayload = `data: ${JSON.stringify({
       type: 'PASSWORD_UPDATED',
@@ -627,6 +630,97 @@ Return ONLY valid JSON matching this schema:
       message: 'Password updated successfully across all records',
       userId: id,
     });
+  });
+
+  // Centralized Real-time Authentication & Credential Verification Endpoint
+  app.post('/api/auth/verify', (req, res) => {
+    const { phone, role, password } = req.body;
+    if (!phone || typeof password !== 'string') {
+      return res.status(400).json({ success: false, error: 'Phone and password required' });
+    }
+    const cleanPhone = String(phone).replace(/\D/g, '');
+    const cleanPassword = String(password).trim();
+    const cleanSuffix = cleanPhone.length >= 7 ? cleanPhone.substring(cleanPhone.length - 7) : cleanPhone;
+
+    // Search users
+    const matchedUser = dbService.store.users.find((u) => {
+      const uDigits = String(u.phone || '').replace(/\D/g, '');
+      const roleMatch = !role || role === 'passenger' ? (u.role === 'passenger' || !u.role) : u.role === role;
+      return roleMatch && (uDigits === cleanPhone || (cleanSuffix.length >= 6 && uDigits.endsWith(cleanSuffix)));
+    });
+
+    // Search drivers
+    const matchedDriver = dbService.store.drivers.find((d) => {
+      const dDigits = String(d.phone || '').replace(/\D/g, '');
+      return dDigits === cleanPhone || (cleanSuffix.length >= 6 && dDigits.endsWith(cleanSuffix));
+    });
+
+    // Search driver applications
+    const driverApps = (dbService.store as any).driver_applications || (dbService.store as any).driverApplications;
+    const matchedApp = Array.isArray(driverApps)
+      ? driverApps.find((a: any) => {
+          const aDigits = String(a.phone || '').replace(/\D/g, '');
+          return aDigits === cleanPhone || (cleanSuffix.length >= 6 && aDigits.endsWith(cleanSuffix));
+        })
+      : null;
+
+    if (role === 'driver') {
+      const targetDriver = matchedDriver || matchedApp;
+      if (!targetDriver) {
+        return res.status(404).json({ success: false, error: 'DRIVER_NOT_FOUND', message: 'Driver phone not found in system' });
+      }
+      const expectedPassword = String(targetDriver.password || (matchedApp as any)?.password || '123456').trim();
+      if (expectedPassword !== cleanPassword) {
+        return res.status(401).json({ success: false, error: 'WRONG_PASSWORD', message: 'Invalid driver password' });
+      }
+      return res.json({
+        success: true,
+        role: 'driver',
+        driver: targetDriver,
+        user: {
+          id: targetDriver.id,
+          name: targetDriver.name || (targetDriver as any).fullName || 'Wadaage Captain',
+          phone: targetDriver.phone,
+          role: 'driver',
+          avatar: targetDriver.avatar || (targetDriver as any).driverPhoto || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+          password: expectedPassword,
+        },
+      });
+    }
+
+    // Default to Passenger / User
+    if (matchedUser) {
+      const expectedPassword = String((matchedUser as any).password || '').trim();
+      if (expectedPassword && expectedPassword !== cleanPassword) {
+        return res.status(401).json({ success: false, error: 'WRONG_PASSWORD', message: 'Invalid password' });
+      }
+      return res.json({
+        success: true,
+        role: matchedUser.role || 'passenger',
+        user: matchedUser,
+      });
+    }
+
+    // Check if phone belongs to driver logging in under any tab
+    if (matchedDriver) {
+      const expectedPassword = String(matchedDriver.password || '123456').trim();
+      if (expectedPassword === cleanPassword) {
+        return res.json({
+          success: true,
+          role: 'driver',
+          driver: matchedDriver,
+          user: {
+            id: matchedDriver.id,
+            name: matchedDriver.name,
+            phone: matchedDriver.phone,
+            role: 'driver',
+            password: expectedPassword,
+          }
+        });
+      }
+    }
+
+    return res.status(404).json({ success: false, error: 'USER_NOT_FOUND', message: 'User not found in system' });
   });
 
   // Database CRUD - Drivers

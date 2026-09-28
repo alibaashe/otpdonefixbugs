@@ -64,6 +64,8 @@ import {
   subscribeToTransactions,
   saveUserToFirestore,
   updateUserInFirestore,
+  updateDriverInFirestore,
+  updateDriverApplicationInFirestore,
   subscribeToUsers,
   saveDriverApplicationToFirestore,
   deleteApplicationFromFirestore,
@@ -2551,12 +2553,66 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
+    // 7. Real-time Users & Password Synchronization across all devices, terminals & APKs
+    const unsubUsers = subscribeToUsers((remoteUsers) => {
+      if (remoteUsers && remoteUsers.length > 0) {
+        const storedUsers = secureStorage.getItem<AuthUser[]>('wadaage_registered_users', []) || [];
+        const merged = [...storedUsers];
+        remoteUsers.forEach((ru) => {
+          const ruDigits = String(ru.phone || '').replace(/\D/g, '');
+          const idx = merged.findIndex((u) => u.id === ru.id || (ruDigits && u.phone && u.phone.replace(/\D/g, '') === ruDigits));
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...ru };
+          } else {
+            merged.push(ru);
+          }
+        });
+        secureStorage.setItem('wadaage_registered_users', merged);
+        try {
+          localStorage.setItem('wadaage_registered_users', JSON.stringify(merged));
+        } catch (_e) {}
+
+        // Keep User Management records up to date with real-time passwords
+        try {
+          const raw = localStorage.getItem('wadaage_user_management_records');
+          const records = safeJsonParse(raw, []);
+          remoteUsers.forEach((ru) => {
+            const ruDigits = String(ru.phone || '').replace(/\D/g, '');
+            const rIdx = records.findIndex((r: any) => r.id === ru.id || (ruDigits && String(r.phone || '').replace(/\D/g, '') === ruDigits));
+            if (rIdx >= 0) {
+              records[rIdx] = {
+                ...records[rIdx],
+                name: ru.name || records[rIdx].name,
+                password: ru.password || records[rIdx].password,
+                role: ru.role === 'admin' ? 'Admin' : ru.role === 'driver' ? 'Driver' : 'Passenger',
+              };
+            } else {
+              records.push({
+                id: ru.id,
+                name: ru.name,
+                phone: ru.phone,
+                email: ru.email,
+                role: ru.role === 'admin' ? 'Admin' : ru.role === 'driver' ? 'Driver' : 'Passenger',
+                password: ru.password,
+                status: 'Active',
+                rating: 5.0,
+                trips: 0,
+                registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+              });
+            }
+          });
+          localStorage.setItem('wadaage_user_management_records', JSON.stringify(records));
+        } catch (_e) {}
+      }
+    });
+
     return () => {
       unsubSettings();
       unsubDrivers();
       unsubRides();
       unsubTxs();
       unsubApplications();
+      unsubUsers();
       window.removeEventListener('storage', handleStorageEvent);
     };
   }, []);
@@ -3822,16 +3878,20 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       secureStorage.setItem('wadaage_custom_drivers', updatedDrivers);
       localStorage.setItem('wadaage_custom_drivers', JSON.stringify(updatedDrivers));
 
-      // 3. Update state drivers
-      setDrivers((prev) =>
-        prev.map((d) => {
+      // 3. Update state drivers & registered drivers storage
+      setDrivers((prev) => {
+        const next = prev.map((d) => {
           const dDigits = d.phone ? d.phone.replace(/\D/g, '') : '';
           if (d.id === userIdOrPhone || (cleanDigits && dDigits.endsWith(cleanDigits))) {
             return { ...d, password: cleanPass };
           }
           return d;
-        })
-      );
+        });
+        try {
+          localStorage.setItem('wadaage_registered_drivers', JSON.stringify(next));
+        } catch (_e) {}
+        return next;
+      });
 
       // 4. Update driver applications
       setDriverApplications((prev) =>
@@ -3863,12 +3923,17 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ password: cleanPass }),
       }).catch(() => {});
 
-      // 7. Firestore sync
+      // 7. Firestore sync across Users, Drivers, and Driver Applications collections
       if (updatedUser) {
         updateUserInFirestore({ id: (updatedUser as AuthUser).id, password: cleanPass }).catch(() => {});
       } else {
         updateUserInFirestore({ id: userIdOrPhone, password: cleanPass }).catch(() => {});
       }
+      updateDriverInFirestore(userIdOrPhone, { password: cleanPass }).catch(() => {});
+      updateDriverApplicationInFirestore(userIdOrPhone, { password: cleanPass } as any).catch(() => {});
+
+      // 8. Real-time Multi-terminal Broadcast
+      broadcastRideEvent('PASSWORD_UPDATED', { id: userIdOrPhone, password: cleanPass });
 
       return true;
     } catch (_e) {

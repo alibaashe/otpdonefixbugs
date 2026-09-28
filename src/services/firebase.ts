@@ -855,12 +855,13 @@ export async function updateUserInFirestore(user: Partial<AuthUser> & { id: stri
   if (!user || !user.id) return;
   try {
     const userRef = doc(db, 'users', user.id);
-    await updateDoc(
+    await setDoc(
       userRef,
       cleanForFirestore({
         ...user,
         updatedAt: new Date().toISOString(),
-      })
+      }),
+      { merge: true }
     );
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
@@ -875,6 +876,162 @@ export async function updateUserInFirestore(user: Partial<AuthUser> & { id: stri
   } catch (err) {
     console.warn('User update notice:', err);
   }
+}
+
+export async function updateDriverInFirestore(driverId: string, updates: Partial<Driver>): Promise<void> {
+  if (!driverId) return;
+  try {
+    const driverRef = doc(db, 'drivers', driverId);
+    await setDoc(
+      driverRef,
+      cleanForFirestore({
+        ...updates,
+        id: driverId,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `drivers/${driverId}`);
+  }
+
+  try {
+    await fetch(getApiUrl(`/api/db/drivers/${driverId}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+  } catch (_e) {}
+}
+
+export async function updateDriverApplicationInFirestore(appId: string, updates: Partial<DriverApplication>): Promise<void> {
+  if (!appId) return;
+  try {
+    const appRef = doc(db, 'driver_applications', appId);
+    await setDoc(
+      appRef,
+      cleanForFirestore({
+        ...updates,
+        id: appId,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `driver_applications/${appId}`);
+  }
+}
+
+/**
+ * Online Centralized Credential Verification across Firestore and Backend API
+ * Allows any terminal, browser, or mobile APK to immediately authenticate with real-time passwords
+ */
+export async function verifyCredentialsOnline(
+  cleanPhone: string,
+  role: 'passenger' | 'driver' | 'admin',
+  passwordInput: string
+): Promise<{
+  success: boolean;
+  user?: any;
+  error?: string;
+  foundUser?: boolean;
+}> {
+  const cleanPassword = passwordInput.trim();
+  const targetSuffix = cleanPhone.length >= 7 ? cleanPhone.substring(cleanPhone.length - 7) : cleanPhone;
+
+  // 1. Try Backend API first (/api/auth/verify)
+  try {
+    const res = await fetch(getApiUrl('/api/auth/verify'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: cleanPhone, role, password: cleanPassword }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.user) {
+        return { success: true, user: data.user, foundUser: true };
+      }
+    } else if (res.status === 401) {
+      return { success: false, foundUser: true, error: 'WRONG_PASSWORD' };
+    }
+  } catch (_err) {}
+
+  // 2. Direct Firestore verification (works anywhere on APK, web, or remote terminal without backend dependency)
+  try {
+    if (role === 'driver') {
+      const driversCol = collection(db, 'drivers');
+      const snap = await getDocs(driversCol);
+      let matchedDriver: any = null;
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d) {
+          const dPhone = String(d.phone || '').replace(/\D/g, '');
+          if (dPhone === cleanPhone || (targetSuffix.length >= 6 && dPhone.endsWith(targetSuffix))) {
+            matchedDriver = { id: docSnap.id, ...d };
+          }
+        }
+      });
+
+      if (!matchedDriver) {
+        const appsCol = collection(db, 'driver_applications');
+        const appSnap = await getDocs(appsCol);
+        appSnap.forEach((docSnap) => {
+          const a = docSnap.data();
+          if (a) {
+            const aPhone = String(a.phone || '').replace(/\D/g, '');
+            if (aPhone === cleanPhone || (targetSuffix.length >= 6 && aPhone.endsWith(targetSuffix))) {
+              matchedDriver = { id: docSnap.id, ...a, isFromApp: true };
+            }
+          }
+        });
+      }
+
+      if (matchedDriver) {
+        const expectedPassword = String(matchedDriver.password || '123456').trim();
+        if (expectedPassword === cleanPassword) {
+          return {
+            success: true,
+            foundUser: true,
+            user: {
+              id: matchedDriver.id,
+              name: matchedDriver.name || matchedDriver.fullName || 'Wadaage Captain',
+              phone: matchedDriver.phone,
+              role: 'driver',
+              avatar: matchedDriver.avatar || matchedDriver.driverPhoto,
+              password: expectedPassword,
+              isVerified: true,
+            },
+          };
+        } else {
+          return { success: false, foundUser: true, error: 'WRONG_PASSWORD' };
+        }
+      }
+    } else {
+      const usersCol = collection(db, 'users');
+      const snap = await getDocs(usersCol);
+      let matchedUser: any = null;
+      snap.forEach((docSnap) => {
+        const u = docSnap.data();
+        if (u) {
+          const uPhone = String(u.phone || '').replace(/\D/g, '');
+          if (uPhone === cleanPhone || (targetSuffix.length >= 6 && uPhone.endsWith(targetSuffix))) {
+            matchedUser = { id: docSnap.id, ...u };
+          }
+        }
+      });
+
+      if (matchedUser) {
+        const expectedPassword = String(matchedUser.password || '').trim();
+        if (!expectedPassword || expectedPassword === cleanPassword) {
+          return { success: true, foundUser: true, user: matchedUser };
+        } else {
+          return { success: false, foundUser: true, error: 'WRONG_PASSWORD' };
+        }
+      }
+    }
+  } catch (_e) {}
+
+  return { success: false, foundUser: false, error: 'NOT_FOUND' };
 }
 
 export async function deleteUserFromFirestore(userId: string): Promise<void> {

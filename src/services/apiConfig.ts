@@ -6,8 +6,8 @@
 // Key for storing custom remote server URL in localStorage (e.g. https://your-domain.com or https://vps-ip:3000)
 const SERVER_URL_STORAGE_KEY = 'wadaage_remote_server_url';
 
-// Default fallback server URL for APKs if no custom Hostinger URL is configured
-const DEFAULT_REMOTE_URL = 'https://www.wadaage.com';
+// Active cloud app backend URL for native APK builds and remote terminals
+const DEFAULT_REMOTE_URL = 'https://ais-pre-cmczfjamftdabuwjqcmxcq-109844122199.europe-west2.run.app';
 
 /**
  * Returns true if the app is running inside a Capacitor native mobile container (Android/iOS APK)
@@ -16,10 +16,9 @@ export function isNativeMobileApp(): boolean {
   if (typeof window === 'undefined') return false;
   const isCapacitor = (window as any).Capacitor !== undefined;
   const isLocalOrigin =
-    window.location.origin.includes('localhost') ||
     window.location.origin.includes('capacitor://') ||
     window.location.protocol === 'file:';
-  return isCapacitor || (isLocalOrigin && !window.location.port.includes('3000'));
+  return isCapacitor || isLocalOrigin;
 }
 
 /**
@@ -38,8 +37,8 @@ export function getServerBaseUrl(): string {
 
   // 2. Check environment variable (configured during build)
   const envApiUrl = (import.meta as any).env?.VITE_API_URL;
-  if (envApiUrl && typeof envApiUrl === 'string') {
-    return envApiUrl.replace(/\/+$/, '');
+  if (envApiUrl && typeof envApiUrl === 'string' && envApiUrl.trim()) {
+    return envApiUrl.trim().replace(/\/+$/, '');
   }
 
   // 3. If running inside Capacitor APK on mobile, use default remote server endpoint
@@ -47,8 +46,13 @@ export function getServerBaseUrl(): string {
     return DEFAULT_REMOTE_URL;
   }
 
-  // 4. In standard web browser on Hostinger or Cloud Run, relative paths or window.location.origin
-  return '';
+  // 4. In web browser: if origin is an actual HTTP/HTTPS domain, relative path or window.location.origin
+  if (window.location.origin && (window.location.origin.startsWith('http://') || window.location.origin.startsWith('https://'))) {
+    // If not local host, or on port 3000, can use relative path or origin
+    return '';
+  }
+
+  return DEFAULT_REMOTE_URL;
 }
 
 /**
