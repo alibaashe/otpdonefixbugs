@@ -673,10 +673,17 @@ Return ONLY valid JSON matching this schema:
       if (expectedPassword !== cleanPassword) {
         return res.status(401).json({ success: false, error: 'WRONG_PASSWORD', message: 'Invalid driver password' });
       }
+      const isDriverVerified = Boolean(
+        ((targetDriver.is_verified === true || targetDriver.isVerified === true) &&
+        (targetDriver.kyc_status === 'approved' || targetDriver.kycStatus === 'approved')) ||
+        (matchedApp && matchedApp.status === 'approved')
+      );
+      const driverKycStatus = targetDriver.kyc_status || targetDriver.kycStatus || (matchedApp ? matchedApp.status : isDriverVerified ? 'approved' : 'pending');
+
       return res.json({
         success: true,
         role: 'driver',
-        driver: targetDriver,
+        driver: { ...targetDriver, isVerified: isDriverVerified, kycStatus: driverKycStatus },
         user: {
           id: targetDriver.id,
           name: targetDriver.name || (targetDriver as any).fullName || 'Wadaage Captain',
@@ -684,6 +691,8 @@ Return ONLY valid JSON matching this schema:
           role: 'driver',
           avatar: targetDriver.avatar || (targetDriver as any).driverPhoto || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
           password: expectedPassword,
+          isVerified: isDriverVerified,
+          kycStatus: driverKycStatus,
         },
       });
     }
@@ -2675,7 +2684,8 @@ Return ONLY valid JSON matching this schema:
             name: userData.fullName || userData.name || 'Driver Partner',
             phone: `+${cleanPhone}`,
             email: userData.email || `${cleanPhone}@wadaage.so`,
-            isVerified: true,
+            isVerified: false,
+            kycStatus: 'pending',
             status: 'PENDING_ADMIN_APPROVAL',
             isActive: false,
             walletBalanceUsd: 0.50,

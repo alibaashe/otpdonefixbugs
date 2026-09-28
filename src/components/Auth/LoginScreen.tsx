@@ -33,7 +33,7 @@ import { sendWhatsAppOtp, verifyWhatsAppOtp, displayFormattedPhone } from '../..
 import { WadaageLogo } from '../Common/WadaageLogo';
 import { SomalilandFlag } from '../Common/SomalilandFlag';
 import { INITIAL_REGISTERED_USERS, INITIAL_DRIVERS, INITIAL_DRIVER_APPLICATIONS } from '../../data/mockData';
-import { secureStorage, safeJsonParse } from '../../utils/security';
+import { secureStorage, safeJsonParse, isPhoneMatch, normalizeSomalilandPhone } from '../../utils/security';
 import { verifyCredentialsOnline } from '../../services/firebase';
 
 // Helper to keep local device storage updated with verified credentials
@@ -211,31 +211,34 @@ export const LoginScreen: React.FC = () => {
             autoApprove: false,
           });
 
+          // DO NOT auto-enter system for drivers! Must wait until admin verifies and accepts documents!
+          const driverPhoneSubmitted = pendingRegistrationData?.phone || getFullPhone();
+          setShowOtpStep(false);
+          setIsSubmitting(false);
+          setPendingRegistrationData(null);
+          setOtpInput('');
           setSuccessModalData({
-            title: language === 'so' ? 'Xaqiijinta WhatsApp-ka Waa Guul' : 'WhatsApp Verification Complete!',
+            title: language === 'so' ? 'Codsiga Darawalka Waa La Gudbiyay' : 'Driver Registration Submitted!',
             message:
               language === 'so'
-                ? 'Xaqiijinta WhatsApp-ka waa dhacday! Akoonkaaga waxaa loo gudbiyay safka maamulka Wadaage. Fadlan sug inta maamuluhu dib-u-eegayo oo ka ansixinayo.'
-                : 'WhatsApp Verification Complete! Your profile has been submitted to the Wadaage Management queue. Please wait for an administrator to review and approve your account application.',
+                ? 'Xaqiijinta WhatsApp-ka waa guul! Codsigaaga iyo dukumentiyadaada waxa loo gudbiyay Maamulka Wadaage Admin. Nidaamka ma gali kartid ilaa maamuluhu ka hubiyo oo ka ansixiyo dukumentiyadaada (Somaliland ID & Driver License). Marka laguu aqbalo (accepted), tab-ka "Gal Akoonka" ayaad ka gali doontaa.'
+                : 'WhatsApp verification successful! Your registration and documents have been submitted to Wadaage Admin. You cannot access the driver platform until an administrator reviews and accepts your documents. Once approved by Admin, you can sign in directly from the Sign In tab.',
             status: 'pending',
-            phone: pendingRegistrationData?.phone || getFullPhone(),
+            phone: driverPhoneSubmitted,
           });
         } else {
+          // Rider registration: immediately gain system access once OTP is verified!
           const newRider = registerRider({
             name: pendingRegistrationData?.fullName || fullName,
             phone: pendingRegistrationData?.phone || getFullPhone(),
             password: pendingRegistrationData?.password || password,
           });
 
-          setSuccessModalData({
-            title: language === 'so' ? 'Xaqiijinta WhatsApp-ka Waa Guul' : 'WhatsApp Verification Complete!',
-            message:
-              language === 'so'
-                ? 'Xaqiijinta WhatsApp-ka waa dhacday! Akoonkaaga waxaa loo gudbiyay safka maamulka Wadaage. Fadlan sug inta maamuluhu ka ansixinayo.'
-                : 'WhatsApp Verification Complete! Your profile has been submitted to the Wadaage Management queue. Please wait for an administrator to review and approve your account application.',
-            status: 'pending',
-            phone: pendingRegistrationData?.phone || getFullPhone(),
-          });
+          setShowOtpStep(false);
+          setPendingRegistrationData(null);
+          setIsSubmitting(false);
+          login(newRider);
+          return;
         }
       } else {
         setFormError(res.message || (language === 'so' ? 'Koodka OTP ma saxna' : 'Invalid OTP code'));
@@ -289,9 +292,21 @@ export const LoginScreen: React.FC = () => {
     setLanguage(language === 'so' ? 'en' : 'so');
   };
 
-  // Helper to lookup registered rider
-  const findRegisteredRider = (inputCleanPhone: string) => {
+  // Helper to lookup registered rider using strict Somaliland phone matching
+  const findRegisteredRider = (inputPhone: string) => {
+    const cleanTarget = normalizeSomalilandPhone(inputPhone);
+    if (!cleanTarget || cleanTarget.length < 7) return null;
+
     try {
+      const deletedIds = (() => {
+        try {
+          const raw = localStorage.getItem('wadaage_deleted_user_ids');
+          return raw ? new Set(JSON.parse(raw)) : new Set();
+        } catch {
+          return new Set();
+        }
+      })();
+
       const registeredUsers: AuthUser[] = secureStorage.getItem<AuthUser[]>('wadaage_registered_users', []) || [];
       const localRegUsers: AuthUser[] = (() => {
         try {
@@ -326,77 +341,86 @@ export const LoginScreen: React.FC = () => {
       })();
 
       const allRiders = [...adminUsers, ...localRegUsers, ...registeredUsers, ...INITIAL_REGISTERED_USERS];
-      const targetSuffix = inputCleanPhone.length >= 7 ? inputCleanPhone.substring(inputCleanPhone.length - 7) : inputCleanPhone;
+
       return allRiders.find((u) => {
-        const uClean = (u.phone || '').replace(/\D/g, '');
-        return (
-          uClean === inputCleanPhone ||
-          uClean.endsWith(inputCleanPhone) ||
-          inputCleanPhone.endsWith(uClean) ||
-          (targetSuffix.length >= 6 && uClean.includes(targetSuffix))
-        );
-      });
+        if (!u || !u.phone) return false;
+        // Strict role check: must be a passenger / rider (never match driver or admin records)
+        const isRiderRole = u.role === 'passenger' || (!u.role && !('vehicle' in u) && !('vehicleCategory' in u));
+        if (!isRiderRole) return false;
+        if (deletedIds.has(u.id) || (u.phone && deletedIds.has(u.phone))) return false;
+        return isPhoneMatch(u.phone, cleanTarget);
+      }) || null;
     } catch {
       return null;
     }
   };
 
-  // Helper to lookup driver in drivers list and applications
-  const findDriverRecord = (inputCleanPhone: string) => {
-    const targetSuffix = inputCleanPhone.length >= 7 ? inputCleanPhone.substring(inputCleanPhone.length - 7) : inputCleanPhone;
-    const adminDrivers: any[] = (() => {
-      try {
-        const raw = localStorage.getItem('wadaage_user_management_records');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            return parsed
-              .filter((p: any) => p.role === 'Driver' || p.role === 'driver')
-              .map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                phone: p.phone,
-                password: p.password,
-                isVerified: true,
-                rating: 5.0,
-                vehicle: {
-                  model: 'Toyota Vitz',
-                  licensePlate: 'SL-2026',
-                  category: 'wadaage_both',
-                },
-              }));
-          }
+  // Helper to lookup driver in drivers list and applications using strict Somaliland phone matching
+  const findDriverRecord = (inputPhone: string) => {
+    const cleanTarget = normalizeSomalilandPhone(inputPhone);
+    if (!cleanTarget || cleanTarget.length < 7) {
+      return { driver: null, application: null };
+    }
+
+    try {
+      const deletedIds = (() => {
+        try {
+          const raw = localStorage.getItem('wadaage_deleted_user_ids');
+          return raw ? new Set(JSON.parse(raw)) : new Set();
+        } catch {
+          return new Set();
         }
-      } catch {
+      })();
+
+      const adminDrivers: any[] = (() => {
+        try {
+          const raw = localStorage.getItem('wadaage_user_management_records');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              return parsed
+                .filter((p: any) => p.role === 'Driver' || p.role === 'driver')
+                .map((p: any) => ({
+                  id: p.id,
+                  name: p.name,
+                  phone: p.phone,
+                  password: p.password,
+                  isVerified: p.status === 'Active' || p.status === 'active',
+                  kycStatus: p.status === 'Active' || p.status === 'active' ? 'approved' : 'pending',
+                  status: p.status === 'Active' || p.status === 'active' ? 'available' : 'pending',
+                  vehicle: {
+                    model: 'Toyota Vitz',
+                    licensePlate: 'SL-2026',
+                    category: 'wadaage_both',
+                  },
+                }));
+            }
+          }
+        } catch {
+          return [];
+        }
         return [];
-      }
-      return [];
-    })();
+      })();
 
-    const allDrivers = [...adminDrivers, ...drivers, ...INITIAL_DRIVERS];
-    const allApps = [...driverApplications, ...INITIAL_DRIVER_APPLICATIONS];
+      const allDrivers = [...adminDrivers, ...drivers, ...INITIAL_DRIVERS];
+      const allApps = [...driverApplications, ...INITIAL_DRIVER_APPLICATIONS];
 
-    const dRecord = allDrivers.find((d) => {
-      const dClean = (d.phone || '').replace(/\D/g, '');
-      return (
-        dClean === inputCleanPhone ||
-        dClean.endsWith(inputCleanPhone) ||
-        inputCleanPhone.endsWith(dClean) ||
-        (targetSuffix.length >= 6 && dClean.includes(targetSuffix))
-      );
-    });
+      const dRecord = allDrivers.find((d) => {
+        if (!d || !d.phone) return false;
+        if (deletedIds.has(d.id) || (d.phone && deletedIds.has(d.phone))) return false;
+        return isPhoneMatch(d.phone, cleanTarget);
+      }) || null;
 
-    const appRecord = allApps.find((a) => {
-      const aClean = (a.phone || '').replace(/\D/g, '');
-      return (
-        aClean === inputCleanPhone ||
-        aClean.endsWith(inputCleanPhone) ||
-        inputCleanPhone.endsWith(aClean) ||
-        (targetSuffix.length >= 6 && aClean.includes(targetSuffix))
-      );
-    });
+      const appRecord = allApps.find((a) => {
+        if (!a || !a.phone) return false;
+        if (deletedIds.has(a.id) || (a.phone && deletedIds.has(a.phone))) return false;
+        return isPhoneMatch(a.phone, cleanTarget);
+      }) || null;
 
-    return { driver: dRecord, application: appRecord };
+      return { driver: dRecord, application: appRecord };
+    } catch {
+      return { driver: null, application: null };
+    }
   };
 
   // Handle Form Submit
@@ -414,8 +438,8 @@ export const LoginScreen: React.FC = () => {
     if (!cleanPhone || cleanPhone.length < 7) {
       setFormError(
         language === 'so'
-          ? 'Fadlan geli lambar taleefan oo sax ah (Ku bilow 63 ama 65, tusaale: 63 4918201)'
-          : 'Please enter a valid phone number (Start with 63 or 65, e.g. 63 4918201)'
+          ? 'Fadlan geli lambar taleefan oo sax ah (Ku bilow 63 ama 65, tusaale: 63 7123456)'
+          : 'Please enter a valid phone number (Start with 63 or 65, e.g. 63 7123456)'
       );
       return;
     }
@@ -460,7 +484,7 @@ export const LoginScreen: React.FC = () => {
           }
 
           // Duplicate phone number validation
-          const existingRider = findRegisteredRider(cleanFullPhone) || findRegisteredRider(cleanPhone);
+          const existingRider = findRegisteredRider(cleanPhone);
           if (existingRider) {
             setIsSubmitting(false);
             setFormError(language === 'so'
@@ -566,13 +590,14 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
-          // Duplicate driver phone check
-          const { driver: existingDriver, application: existingApp } = findDriverRecord(cleanFullPhone);
-          if (existingDriver || existingApp) {
+          // Duplicate driver phone check: only block if this driver is already APPROVED by Admin
+          const { driver: existingDriver, application: existingApp } = findDriverRecord(cleanPhone);
+          const isAlreadyApproved = existingDriver?.isVerified === true && existingDriver?.kycStatus === 'approved';
+          if (isAlreadyApproved) {
             setIsSubmitting(false);
             setFormError(language === 'so'
-              ? 'Lambarkani hore ayuu u diiwaangashanaa. Fadlan gal akoonkaaga (Please login instead).'
-              : 'This phone number is already registered. Please login instead.');
+              ? 'Lambarkani waa darawal hore loo ansixiyay. Fadlan tab-ka sare ka dooro "Gal Akoonka (Sign In)" si aad u gasho.'
+              : 'This phone number is already registered and approved. Please switch to the "Sign In" tab to log in.');
             return;
           }
 
@@ -620,15 +645,20 @@ export const LoginScreen: React.FC = () => {
             if (onlineCheck.success && onlineCheck.user) {
               const verifiedUser = onlineCheck.user;
               syncDriverToLocalCache(verifiedUser, password.trim());
+              const isOnlineApproved = Boolean(
+                (verifiedUser.isVerified === true || verifiedUser.is_verified === true) &&
+                (verifiedUser.kycStatus === 'approved' || verifiedUser.kyc_status === 'approved')
+              );
               existingDriver = {
                 id: verifiedUser.id,
                 name: verifiedUser.name,
                 phone: verifiedUser.phone,
                 password: password.trim(),
-                isVerified: true,
+                isVerified: isOnlineApproved,
+                kycStatus: isOnlineApproved ? 'approved' : 'pending',
                 rating: verifiedUser.rating || 5.0,
                 totalTrips: verifiedUser.totalTrips || 0,
-                status: 'available',
+                status: isOnlineApproved ? 'available' : 'offline',
                 avatar: verifiedUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
                 vehicle: verifiedUser.vehicle || {
                   model: 'Toyota Vitz',
@@ -673,16 +703,26 @@ export const LoginScreen: React.FC = () => {
             return;
           }
 
-          const appStatus = existingDriver?.isVerified
-            ? 'approved'
-            : existingApp?.status || 'approved';
+          const isApproved =
+            (existingDriver?.isVerified === true && existingDriver?.kycStatus === 'approved') ||
+            (existingApp?.status === 'approved');
 
-          if (appStatus === 'rejected') {
+          if (existingApp?.status === 'rejected') {
             setIsSubmitting(false);
             setFormError(
               language === 'so'
                 ? 'Xisaabtaada darawalnimo waa la diiday (Registration Denied). Fadlan la xidhiidh maamulka Wadaage (+252 63 6807814).'
                 : 'Your driver registration was denied by Admin. Please contact Wadaage Support (+252 63 6807814).'
+            );
+            return;
+          }
+
+          if (!isApproved) {
+            setIsSubmitting(false);
+            setFormError(
+              language === 'so'
+                ? 'Akoonkaaga darawalku wali wuxuu ku jiraa dib-u-eegis (Pending Admin Verification). Fadlan sug inta maamuluhu ka hubinayo dukumentiyadaada oo ka ansixinayo.'
+                : 'Your driver account is pending verification by Wadaage Admin. Please wait for document review and approval before accessing the driver platform.'
             );
             return;
           }

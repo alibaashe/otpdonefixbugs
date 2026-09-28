@@ -426,3 +426,51 @@ export function generateSecureToken(prefix: string = 'tok'): string {
     .join('');
   return `${prefix}_${hex}`;
 }
+
+// ---------------------------------------------------------------------------
+// 8. Somaliland Phone Normalization & Exact Identity Matching
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes any Somaliland phone number into clean standard digits:
+ * e.g. "+252 63 6807814" -> "636807814"
+ *      "063 4455667"     -> "634455667"
+ *      "252654918201"    -> "654918201"
+ */
+export function normalizeSomalilandPhone(phone: string | undefined | null): string {
+  if (!phone) return '';
+  let digits = String(phone).replace(/\D/g, '');
+  if (digits.startsWith('00252')) digits = digits.substring(5);
+  else if (digits.startsWith('252')) digits = digits.substring(3);
+  if (digits.startsWith('0')) digits = digits.substring(1);
+  return digits;
+}
+
+/**
+ * Robustly checks if two phone representations refer to the exact same subscriber phone.
+ * Eliminates false positives from empty strings, short prefixes, or accidental digit subsets.
+ */
+export function isPhoneMatch(phoneA: string | undefined | null, phoneB: string | undefined | null): boolean {
+  const a = normalizeSomalilandPhone(phoneA);
+  const b = normalizeSomalilandPhone(phoneB);
+  // Both numbers must have at least 7 real digits
+  if (!a || !b || a.length < 7 || b.length < 7) {
+    return false;
+  }
+  // Exact match (covers 9-digit identical numbers)
+  if (a === b) return true;
+
+  // If both numbers have 8 or more digits (e.g. both have operator prefixes like 63 or 65),
+  // they MUST match exactly; different operator prefixes (e.g. 63 vs 65) are NEVER a match!
+  if (a.length >= 8 && b.length >= 8) {
+    return a === b;
+  }
+
+  // Handle case where one number has 9 digits (with 2-digit operator prefix)
+  // and the other is a 7-digit local subscriber number without operator prefix:
+  if (a.length === 9 && b.length === 7 && a.substring(2) === b) return true;
+  if (b.length === 9 && a.length === 7 && b.substring(2) === a) return true;
+
+  return false;
+}
+

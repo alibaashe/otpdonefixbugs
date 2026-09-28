@@ -23,6 +23,7 @@ import {
 import { useRide } from '../../context/RideContext';
 import { VehicleCategory } from '../../types';
 import { SomalilandFlag } from '../Common/SomalilandFlag';
+import { isPhoneMatch, normalizeSomalilandPhone } from '../../utils/security';
 
 interface DriverRegistrationModalProps {
   isOpen: boolean;
@@ -99,17 +100,16 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
     e.preventDefault();
     setErrorMessage(null);
 
-    const cleanDigits = formData.phone.replace(/\D/g, '');
-    if (!cleanDigits) {
-      setErrorMessage('Please enter a valid phone number.');
+    const cleanDigits = normalizeSomalilandPhone(formData.phone);
+    if (!cleanDigits || cleanDigits.length < 7) {
+      setErrorMessage('Please enter a valid Somaliland phone number (e.g. 63 7123456 or 65 4918201).');
       return;
     }
 
-    const isDuplicate = drivers.some(d => d.phone && d.phone.replace(/\D/g, '') === cleanDigits) ||
-      driverApplications.some(a => a.phone && a.phone.replace(/\D/g, '') === cleanDigits);
+    const isAlreadyApprovedDriver = drivers.some(d => d.phone && isPhoneMatch(d.phone, cleanDigits) && d.isVerified === true && d.kycStatus === 'approved');
 
-    if (isDuplicate) {
-      setErrorMessage('This phone number is already registered. Please login instead.');
+    if (isAlreadyApprovedDriver) {
+      setErrorMessage('This phone number is already registered and approved as a Wadaage Driver. Please login instead.');
       return;
     }
 
@@ -144,7 +144,7 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
     });
     setSubmittedAppId(app.id);
 
-    // Also register the driver with pending KYC status so their profile is created
+    // Also register the driver with pending KYC status so their profile is created for admin review
     registerDriver({
       name: formData.fullName,
       phone: formData.phone,
@@ -153,6 +153,7 @@ export const DriverRegistrationModal: React.FC<DriverRegistrationModalProps> = (
       vehicleModel: `${formData.make} ${formData.model}`.trim() || 'Toyota Vitz',
       vehicleColor: formData.color.trim() || 'White',
       licensePlate: formData.licensePlate.trim() || `SL-${Math.floor(10000 + Math.random() * 90000)}`,
+      autoApprove: false,
     });
 
     if (onSuccess) {

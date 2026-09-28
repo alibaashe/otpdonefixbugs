@@ -989,6 +989,13 @@ export async function verifyCredentialsOnline(
       if (matchedDriver) {
         const expectedPassword = String(matchedDriver.password || '123456').trim();
         if (expectedPassword === cleanPassword) {
+          const isVerified = Boolean(
+            ((matchedDriver.isVerified === true || matchedDriver.is_verified === true) &&
+             (matchedDriver.kycStatus === 'approved' || matchedDriver.kyc_status === 'approved')) ||
+            (matchedDriver.isFromApp && matchedDriver.status === 'approved')
+          );
+          const kycStatus = matchedDriver.kycStatus || matchedDriver.kyc_status || (matchedDriver.status === 'approved' ? 'approved' : isVerified ? 'approved' : 'pending');
+
           return {
             success: true,
             foundUser: true,
@@ -999,7 +1006,9 @@ export async function verifyCredentialsOnline(
               role: 'driver',
               avatar: matchedDriver.avatar || matchedDriver.driverPhoto,
               password: expectedPassword,
-              isVerified: true,
+              isVerified,
+              kycStatus,
+              status: matchedDriver.status || (isVerified ? 'available' : 'offline'),
             },
           };
         } else {

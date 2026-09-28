@@ -3953,7 +3953,7 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     autoApprove?: boolean;
   }): { driver: Driver; user: AuthUser; application: DriverApplication } => {
     const cleanPhone = driverData.phone.replace(/\D/g, '');
-    const isAutoApproved = driverData.autoApprove !== undefined ? !!driverData.autoApprove : true;
+    const isAutoApproved = driverData.autoApprove !== undefined ? !!driverData.autoApprove : false;
     const generateUniquePassword = () => {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
       let res = 'Wad#';
