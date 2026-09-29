@@ -2688,9 +2688,9 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const actualDriverName = targetDriver?.name || (currentUser?.role === 'driver' ? currentUser.name : 'Driver Partner');
     const actualDriverPhone = phone || targetDriver?.phone || currentUser?.phone || '';
 
-    const isInstantCard = paymentProvider === 'card';
-    const newBalUsd = applyDriverBalanceUpdate(actualDriverId, actualDriverPhone, amountUsd, false);
-    const initialStatus: 'completed' | 'pending_verification' = 'completed';
+    // Top-ups require Admin verification and approval before crediting balance
+    const currentBalUsd = getDriverWalletBalance(actualDriverId) || 0;
+    const initialStatus: 'pending_verification' = 'pending_verification';
 
     const newTx: DriverWalletTransaction = {
       id: `dtx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -2702,17 +2702,16 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       amountSos,
       originalRequestedAmountSos: amountSos,
       originalRequestedAmountUsd: amountUsd,
-      newBalanceUsd: newBalUsd,
-      title: `Top-Up via ${providerAccount} (+${amountSos.toLocaleString()} SLSH)`,
+      newBalanceUsd: currentBalUsd,
+      title: `Top-Up Request via ${providerAccount} (+${amountSos.toLocaleString()} SLSH) - Pending Admin Approval`,
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: initialStatus,
       paymentProvider,
       referenceId: refCode,
-      verificationMethod: 'instant_gateway',
-      verifiedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      verificationMethod: 'manual_ref',
       smsReceiptText:
         smsText ||
-        `Payment of ${amountSos.toLocaleString()} SLSH via USSD to ${providerAccount}. Ref: ${refCode}`,
+        `Top-up request of ${amountSos.toLocaleString()} SLSH via ${providerAccount}. Ref: ${refCode}. Awaiting Admin Verification.`,
     };
 
     setDriverWalletTransactions((prev) => {
@@ -2728,8 +2727,8 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...newTx,
-        alreadyCreditedOnFrontend: true,
-        newBalanceUsd: newBalUsd,
+        alreadyCreditedOnFrontend: false,
+        newBalanceUsd: currentBalUsd,
       }),
     }).catch(() => {});
 
@@ -2738,16 +2737,16 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       driverPhone: actualDriverPhone,
       amountUsd,
       amountSos,
-      newBalanceUsd: newBalUsd,
+      newBalanceUsd: currentBalUsd,
       tx: newTx,
     });
 
     return {
       success: true,
-      message: `Top-Up of ${amountSos.toLocaleString()} SLSH ($${amountUsd.toFixed(2)}) successful! Your balance is now ${Math.round(newBalUsd * 10000).toLocaleString()} SLSH ($${newBalUsd.toFixed(2)}). You can now go online to receive orders.`,
+      message: `Top-Up request of ${amountSos.toLocaleString()} SLSH ($${amountUsd.toFixed(2)}) submitted successfully! Awaiting Admin verification and approval.`,
       txId: newTx.id,
-      newBalanceUsd: newBalUsd,
-      newBalanceSos: Math.round(newBalUsd * 10000),
+      newBalanceUsd: currentBalUsd,
+      newBalanceSos: Math.round(currentBalUsd * 10000),
     };
   };
 
@@ -3982,10 +3981,10 @@ export const RideProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('wadaage_driver_trip_history');
     } catch {}
 
-    // Initialize fresh wallet balance with welcome credit for new driver
+    // Initialize fresh $0.00 wallet balance for new driver
     setDriverWallets((prev) => ({
       ...prev,
-      [newDriverUser.id]: 15.00,
+      [newDriverUser.id]: 0.00,
     }));
 
     const newDriver: Driver = {
