@@ -346,7 +346,7 @@ export const RolePermissionManager: React.FC = () => {
                         : 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20'
                     }`}
                   >
-                    {staff.name.charAt(0)}
+                    {(staff.name || 'S').charAt(0)}
                   </div>
                   <div>
                     <div className="flex items-center space-x-2">

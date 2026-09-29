@@ -35,7 +35,7 @@ const RAW_GOOGLE_MAPS_KEY =
   (process.env as any).GOOGLE_MAPS_API_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
-  '';
+  'AlzaSyBAOVGm7NLFbVZdx2GCsn5_YjdYQVry_4w';
 
 // Production Google Maps key
 const GOOGLE_MAPS_KEY = RAW_GOOGLE_MAPS_KEY.trim();
@@ -778,5 +778,15 @@ const GoogleMapRenderer: React.FC<GoogleInteractiveMapProps> = ({
 };
 
 export const GoogleInteractiveMap: React.FC<GoogleInteractiveMapProps> = (props) => {
-  return <MapLibreInteractiveMap {...props} />;
+  if (!GOOGLE_MAPS_KEY) {
+    return <MapLibreInteractiveMap {...props} />;
+  }
+
+  return (
+    <MapErrorBoundary fallback={<MapLibreInteractiveMap {...props} />}>
+      <APIProvider apiKey={GOOGLE_MAPS_KEY} libraries={['places', 'geometry']}>
+        <GoogleMapRenderer {...props} />
+      </APIProvider>
+    </MapErrorBoundary>
+  );
 };

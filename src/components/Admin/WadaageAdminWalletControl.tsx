@@ -129,7 +129,8 @@ export const WadaageAdminWalletControl: React.FC = () => {
   );
 
   const totalFleetBalanceUsd = useMemo(() => {
-    return drivers.reduce((sum, d) => {
+    return (drivers || []).reduce((sum, d) => {
+      if (!d) return sum;
       const b = getDriverWalletBalance(d.id) || (d.phone ? getDriverWalletBalance(d.phone) : 0) || 0;
       return sum + b;
     }, 0);
@@ -302,12 +303,13 @@ export const WadaageAdminWalletControl: React.FC = () => {
 
   // Filtered Fleet Drivers with Live Metrics
   const filteredDrivers = useMemo(() => {
-    return drivers.filter((drv) => {
+    return (drivers || []).filter((drv) => {
+      if (!drv) return false;
       const balUsd = getDriverWalletBalance(drv.id) || (drv.phone ? getDriverWalletBalance(drv.phone) : 0);
-      const q = driverSearchQuery.toLowerCase().trim();
+      const q = (driverSearchQuery || '').toLowerCase().trim();
       const matchesSearch =
         !q ||
-        drv.name.toLowerCase().includes(q) ||
+        (drv.name || '').toLowerCase().includes(q) ||
         (drv.phone || '').toLowerCase().includes(q) ||
         (drv.vehicle?.licensePlate || '').toLowerCase().includes(q) ||
         (drv.id || '').toLowerCase().includes(q);
@@ -620,15 +622,15 @@ export const WadaageAdminWalletControl: React.FC = () => {
                           <div className="flex items-center space-x-2.5">
                             <div className="w-9 h-9 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 font-black flex items-center justify-center shrink-0 border border-emerald-300 dark:border-emerald-700 shadow-sm overflow-hidden">
                               {drv.avatar ? (
-                                <img src={drv.avatar} alt={drv.name} className="w-full h-full object-cover" />
+                                <img src={drv.avatar} alt={drv?.name || 'Driver'} className="w-full h-full object-cover" />
                               ) : (
-                                drv.name.charAt(0)
+                                (drv?.name ? String(drv.name).charAt(0) : 'D')
                               )}
                             </div>
                             <div>
-                              <span className="font-bold text-slate-900 dark:text-white block">{drv.name}</span>
+                              <span className="font-bold text-slate-900 dark:text-white block">{drv.name || 'Driver Partner'}</span>
                               <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 font-mono">
-                                <span>{drv.phone}</span>
+                                <span>{drv.phone || 'N/A'}</span>
                                 <span>•</span>
                                 <span className="text-slate-400">{drv.id}</span>
                               </div>
@@ -798,7 +800,7 @@ export const WadaageAdminWalletControl: React.FC = () => {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-amber-200 dark:border-slate-700">
                       <div className="flex items-center space-x-3">
                         <div className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-base shadow-sm">
-                          {tx.driverName ? tx.driverName.charAt(0) : 'D'}
+                          {(tx?.driverName ? String(tx.driverName).charAt(0) : 'D')}
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
@@ -967,11 +969,12 @@ export const WadaageAdminWalletControl: React.FC = () => {
                   onChange={(e) => setTargetDriverId(e.target.value)}
                   className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl py-2 px-3 text-slate-900 dark:text-white font-bold outline-none focus:border-emerald-500 text-xs"
                 >
-                  {drivers.map((drv) => {
+                  {(drivers || []).map((drv) => {
+                    if (!drv) return null;
                     const b = getDriverWalletBalance(drv.id) || (drv.phone ? getDriverWalletBalance(drv.phone) : 0);
                     return (
                       <option key={drv.id} value={drv.id}>
-                        {drv.name} ({drv.phone}) — Balance: ${b.toFixed(2)} ({(b * 10000).toLocaleString()} SLSH)
+                        {drv.name || 'Driver Partner'} ({drv.phone || 'N/A'}) — Balance: ${b.toFixed(2)} ({(b * 10000).toLocaleString()} SLSH)
                       </option>
                     );
                   })}
