@@ -9,6 +9,7 @@ export interface AuthUser {
   avatar?: string;
   status?: string;
   walletBalanceUsd?: number;
+  wallet_balance_usd?: number;
   password?: string;
 }
 
@@ -88,6 +89,7 @@ export interface Driver {
   todayEarnings: number;
   weeklyEarnings: number;
   walletBalanceUsd?: number;
+  wallet_balance_usd?: number;
   service_type?: 'Normal' | 'Wadaage' | 'Both';
   hoursOnline: number;
   acceptanceRate: number;

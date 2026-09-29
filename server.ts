@@ -1050,8 +1050,12 @@ Return ONLY valid JSON matching this schema:
       }
     }
 
-    // Direct Override Balance set if provided
-    if (req.body.newBalanceUsd !== undefined && (tx.driverId || tx.driverPhone || req.body.driverName)) {
+    // Direct Override Balance set if provided (ONLY for completed/verified transactions, never pending)
+    if (
+      (currentStatus === 'completed' || currentStatus === 'verified') &&
+      req.body.newBalanceUsd !== undefined &&
+      (tx.driverId || tx.driverPhone || req.body.driverName)
+    ) {
       const cleanPhone = String(tx.driverPhone || req.body.driverPhone || '').replace(/\D/g, '');
       const targetDriverId = tx.driverId || req.body.driverId || req.body.user_id;
       const targetDriverName = req.body.driverName || tx.driverName;

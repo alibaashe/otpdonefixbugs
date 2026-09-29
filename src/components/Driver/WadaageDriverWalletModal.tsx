@@ -54,17 +54,23 @@ export const WadaageDriverWalletModal: React.FC<WadaageDriverWalletModalProps> =
   const [copiedUSSD, setCopiedUSSD] = useState(false);
 
   // Dedicated reactive balance state variable tracking live driver balance
-  const activeDriverId = currentUser?.role === 'driver' ? (currentUser.id || currentUser.phone || 'drv_01') : 'drv_01';
+  const activeDriverId = currentUser?.role === 'driver' ? (currentUser.id || currentUser.phone || '') : '';
   const calculateCurrentBalanceUsd = () => {
-    if (getDriverWalletBalance) {
-      const directBal = getDriverWalletBalance(activeDriverId);
-      if (directBal !== undefined && !isNaN(directBal)) return directBal;
-      if (currentUser?.phone) {
+    if (currentUser?.role === 'driver') {
+      if (getDriverWalletBalance && activeDriverId) {
+        const directBal = getDriverWalletBalance(activeDriverId);
+        if (directBal !== undefined && !isNaN(directBal)) return directBal;
+      }
+      if (getDriverWalletBalance && currentUser?.phone) {
         const phoneBal = getDriverWalletBalance(currentUser.phone);
         if (phoneBal !== undefined && !isNaN(phoneBal)) return phoneBal;
       }
+      if (currentUser.walletBalanceUsd !== undefined && !isNaN(Number(currentUser.walletBalanceUsd))) {
+        return Number(currentUser.walletBalanceUsd);
+      }
+      return 0.00;
     }
-    return driverWalletBalanceUsd !== undefined && !isNaN(driverWalletBalanceUsd) ? driverWalletBalanceUsd : 0;
+    return driverWalletBalanceUsd !== undefined && !isNaN(driverWalletBalanceUsd) ? driverWalletBalanceUsd : 0.00;
   };
 
   const [activeBalanceUsd, setActiveBalanceUsd] = useState<number>(calculateCurrentBalanceUsd);

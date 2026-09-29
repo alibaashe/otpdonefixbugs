@@ -96,7 +96,7 @@ export class WadaageDatabaseService {
         status: 'available',
         lat: 9.5620,
         lng: 44.0645,
-        wallet_balance_usd: 15.0,
+        wallet_balance_usd: 0.0,
       },
       {
         id: 'drv_hga_02',
@@ -115,7 +115,7 @@ export class WadaageDatabaseService {
         status: 'available',
         lat: 9.5745,
         lng: 44.0530,
-        wallet_balance_usd: 15.0,
+        wallet_balance_usd: 0.0,
       },
       {
         id: 'drv_hga_03',
@@ -134,7 +134,7 @@ export class WadaageDatabaseService {
         status: 'available',
         lat: 9.5515,
         lng: 44.0725,
-        wallet_balance_usd: 15.0,
+        wallet_balance_usd: 0.0,
       },
       {
         id: 'drv_hga_04',
@@ -153,7 +153,7 @@ export class WadaageDatabaseService {
         status: 'available',
         lat: 9.5395,
         lng: 44.0880,
-        wallet_balance_usd: 15.0,
+        wallet_balance_usd: 0.0,
       },
     ] as any[],
     driver_applications: [] as any[],

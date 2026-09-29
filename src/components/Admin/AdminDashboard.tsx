@@ -279,7 +279,7 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <Wallet className="w-4 h-4" />
-          <span>Driver Top-Ups</span>
+          <span>Driver Wallets & Top-Ups</span>
           {pendingTopUpCount > 0 && (
             <span className="ml-1 px-1.5 py-0.2 bg-amber-500 text-slate-950 font-black text-[10px] rounded-full animate-pulse">
               {pendingTopUpCount}

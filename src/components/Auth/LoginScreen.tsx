@@ -728,6 +728,7 @@ export const LoginScreen: React.FC = () => {
           }
 
           // Approved Driver Login
+          const driverBal = existingDriver?.walletBalanceUsd !== undefined ? Number(existingDriver.walletBalanceUsd) : 0.00;
           const driverUser: AuthUser = {
             id: existingDriver?.id || existingApp?.id || `drv_${Date.now()}`,
             name: existingDriver?.name || existingApp?.fullName || 'Wadaage Captain',
@@ -735,6 +736,8 @@ export const LoginScreen: React.FC = () => {
             phone: formattedPhone,
             role: 'driver',
             avatar: existingDriver?.avatar || existingApp?.driverPhoto || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+            walletBalanceUsd: driverBal,
+            wallet_balance_usd: driverBal,
           };
 
           setIsSubmitting(false);
